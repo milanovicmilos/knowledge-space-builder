@@ -1,0 +1,4 @@
+# Global ignore rules
+.venv/
+__pycache__/
+*.py[cod]
