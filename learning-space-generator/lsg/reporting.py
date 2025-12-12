@@ -73,7 +73,9 @@ class EarlyStoppingReporter(BaseReporter):
     def __init__(self, patience: int = 10, is_greedy: bool = False):
         self._is_greedy = is_greedy
         self._patience = patience
+        self._initial_patience = patience
         self._prev_best_fitness = -float('inf')
+        self._stagnant_generations = 0
 
     def post_evaluate(self, config, population, species, best_genome):
         if self._is_greedy:
@@ -83,10 +85,17 @@ class EarlyStoppingReporter(BaseReporter):
             if best_genome.is_valid():
                 raise EarlyStoppingException(best_genome=best_genome)
         else:
-            if best_genome.fitness > self._prev_best_fitness:
+            # Poboljšanje mora biti bar 0.01% da se računa
+            improvement = best_genome.fitness - self._prev_best_fitness
+            min_improvement = abs(self._prev_best_fitness) * 0.0001
+            
+            if improvement > min_improvement:
                 self._prev_best_fitness = best_genome.fitness
+                self._patience = self._initial_patience  # Reset patience
+                self._stagnant_generations = 0
             else:
                 self._patience -= 1
+                self._stagnant_generations += 1
 
             if self._patience == 0:
                 raise EarlyStoppingException(best_genome=best_genome)
