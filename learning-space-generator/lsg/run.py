@@ -1,10 +1,15 @@
 import argparse
 import configparser
 import random
-from typing import List
+import tempfile
+from typing import List, Optional, Tuple
+import logging
+from pathlib import Path
 
 import neat
 import pandas as pd
+import numpy as np
+from scipy.sparse.linalg import svds
 
 try:
     import matplotlib
@@ -17,8 +22,106 @@ except ImportError:
 
 from . import paths, evaluation, reporting, genome, output_utils
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+
 EARLY_STOPPING_PATIENCE = 20
 DEFAULT_GENERATIONS = 15
+
+
+def matrix_completion_als(X: np.ndarray, 
+                          rank: int = 20,
+                          max_iter: int = 50,
+                          reg_lambda: float = 0.1,
+                          verbose: bool = True) -> np.ndarray:
+    """
+    Matrix Completion koristeći Alternating Least Squares (ALS).
+    
+    Rekonstruiše sparse matricu (sa NaN vrednostima) u complete matricu.
+    Ovo je moderan pristup iz recommender sistema - tretira problem kao
+    low-rank matrix factorization: X ≈ U @ V^T
+    
+    Args:
+        X: sparse matrica (n_rows, n_cols) sa NaN gde nedostaju podaci
+        rank: dimenzionalnost latentnog prostora (d)
+        max_iter: broj ALS iteracija
+        reg_lambda: L2 regularizacija
+        verbose: loguj progress
+        
+    Returns:
+        Kompletna matrica (n_rows, n_cols) bez NaN vrednosti
+        
+    Matematika:
+        - Minimizuje: ||P_Ω(X - UV^T)||² + λ(||U||² + ||V||²)
+        - gde je Ω skup poznatih elemenata
+        - Alternira između fiksiranja U i optimizovanja V, i obrnuto
+    """
+    logger.info(f"Matrix Completion ALS: shape={X.shape}, rank={rank}, iterations={max_iter}")
+    
+    n_rows, n_cols = X.shape
+    
+    # Maska gde NISU NaN (poznate vrednosti)
+    mask = ~np.isnan(X)
+    n_observed = np.sum(mask)
+    sparsity = 100.0 * (1 - n_observed / (n_rows * n_cols))
+    logger.info(f"  Observed: {n_observed:,} / {n_rows * n_cols:,} ({100-sparsity:.1f}% dense, {sparsity:.1f}% sparse)")
+    
+    # Inicijalizuj U i V random malim vrednostima
+    U = np.random.randn(n_rows, rank) * 0.01
+    V = np.random.randn(n_cols, rank) * 0.01
+    
+    # Zameni NaN sa 0 za računanje (samo privremeno)
+    X_filled = np.where(mask, X, 0)
+    
+    for iteration in range(max_iter):
+        # Ažuriraj U (fiksiran V)
+        for i in range(n_rows):
+            # Indeksi kolona gde i-ti red IMA podataka
+            cols_with_data = np.where(mask[i, :])[0]
+            if len(cols_with_data) == 0:
+                continue
+                
+            # V matrica za te kolone
+            V_i = V[cols_with_data, :]
+            
+            # ALS update za U[i]:
+            # U[i] = (V_i^T V_i + λI)^(-1) V_i^T X[i, cols]
+            A = V_i.T @ V_i + reg_lambda * np.eye(rank)
+            b = V_i.T @ X_filled[i, cols_with_data]
+            U[i, :] = np.linalg.solve(A, b)
+        
+        # Ažuriraj V (fiksiran U)
+        for j in range(n_cols):
+            # Indeksi redova gde j-ta kolona IMA podataka
+            rows_with_data = np.where(mask[:, j])[0]
+            if len(rows_with_data) == 0:
+                continue
+                
+            # U matrica za te redove
+            U_j = U[rows_with_data, :]
+            
+            # ALS update za V[j]:
+            # V[j] = (U_j^T U_j + λI)^(-1) U_j^T X[rows, j]
+            A = U_j.T @ U_j + reg_lambda * np.eye(rank)
+            b = U_j.T @ X_filled[rows_with_data, j]
+            V[j, :] = np.linalg.solve(A, b)
+        
+        # Računaj reconstruction error (samo na poznatim elementima)
+        if verbose and (iteration + 1) % 10 == 0:
+            X_reconstructed = U @ V.T
+            error = np.sqrt(np.mean((X_filled[mask] - X_reconstructed[mask]) ** 2))
+            logger.info(f"    Iteration {iteration+1}/{max_iter}: RMSE = {error:.4f}")
+    
+    # Finalna rekonstrukcija
+    X_completed = U @ V.T
+    
+    # Clip na [0, 1] jer su odgovori binarne vrednosti
+    X_completed = np.clip(X_completed, 0, 1)
+    
+    logger.info(f"  Matrix completion finished. Reconstructed matrix range: [{X_completed.min():.3f}, {X_completed.max():.3f}]")
+    
+    return X_completed
+
 
 def run_neat(generations: int,
              config_filename: str,
@@ -179,30 +282,242 @@ def _save_graph_matplotlib(learning_space, outfile: str) -> None:
     print(f"Graph visualization saved to '{outfile}' using matplotlib.")
 
 
+def _infer_delimiter(path: str) -> str:
+    """Infer CSV delimiter using a small sample; default to comma."""
+    import csv
+
+    with open(path, 'r', newline='') as fp:
+        sample = ''.join([fp.readline() for _ in range(5)])
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=[',', ';', '\t'])
+        return dialect.delimiter
+    except Exception:
+        return ','
+
+
+def _identify_binary_columns(df: pd.DataFrame) -> List[str]:
+    """Identify columns that contain only binary responses (0/1/NA)."""
+    binary_cols = []
+    for col in df.columns:
+        series = df[col]
+        unique_vals = {v for v in series.dropna().unique().tolist()}
+
+        normalized = set()
+        for v in unique_vals:
+            if isinstance(v, (int, float)):
+                normalized.add(int(v))
+                continue
+            s = str(v).strip()
+            if s.isdigit():
+                normalized.add(int(s))
+            else:
+                normalized.add(s)
+
+        if normalized <= {0, 1}:
+            binary_cols.append(col)
+    return binary_cols
+
+
+def _get_column_coverage(df: pd.DataFrame, binary_cols: List[str]) -> pd.Series:
+    """Calculate coverage (% non-NA) for each binary column."""
+    coverage = {}
+    for col in binary_cols:
+        non_na = df[col].notna().sum()
+        coverage[col] = (non_na / len(df)) * 100
+    return pd.Series(coverage).sort_values(ascending=False)
+
+
+def _select_columns(coverage: pd.Series,
+                   min_coverage: float = 5.0,
+                   max_items: Optional[int] = None) -> List[str]:
+    """Select columns based on coverage thresholds."""
+    selected = coverage[coverage >= min_coverage].index.tolist()
+    if max_items and len(selected) > max_items:
+        selected = selected[:max_items]
+    return selected
+
+
+def _parse_knowledge_items(raw_value: str) -> Optional[int]:
+    """Support integer or the keyword 'auto'/'all' for using all columns."""
+    if raw_value is None:
+        return None
+    value = str(raw_value).strip().lower()
+    if value in ('auto', 'all', ''):
+        return None
+    return int(raw_value)
+
+
+def _stratified_sample(df: pd.DataFrame,
+                      sample_size: Optional[int],
+                      stratify_col: str = 'T_Grade') -> pd.DataFrame:
+    """Sample dataframe, optionally stratified by a column (e.g., grade)."""
+    if sample_size is None or sample_size >= len(df):
+        return df
+    if stratify_col and stratify_col in df.columns:
+        return df.groupby(stratify_col, group_keys=False).apply(
+            lambda x: x.sample(min(len(x), max(1, int(sample_size * len(x) / len(df)))))
+        ).head(sample_size)
+    return df.sample(n=min(sample_size, len(df)), random_state=42)
+
+
 def load_response_patterns(path: str,
-                           knowledge_items: int,
-                           randomize: bool = True) -> List[str]:
-    df = pd.read_csv(path, header=None)
-    ncols = len(df.columns)
-
-    if randomize:
-        included_cols = list(random.sample(range(ncols), knowledge_items))
+                           knowledge_items: Optional[int],
+                           randomize: bool = True,
+                           min_coverage: float = 0.0,
+                           sample_size: Optional[int] = None,
+                           stratify: bool = True,
+                           use_matrix_completion: bool = True,
+                           als_rank: int = 30,
+                           als_iterations: int = 30) -> Tuple[List[str], dict]:
+    """
+    Load response patterns sa NAPREDNOM Matrix Completion metodom.
+    
+    KLJUČNA PROMENA: Više ne odbacujemo kolone niti redove!
+    Koristimo Matrix Completion (ALS) da rekonstruišemo COMPLETE matricu iz sparse podataka.
+    
+    Args:
+        path: Path to CSV file
+        knowledge_items: Number of items (None = use ALL columns)
+        randomize: Randomly select items if knowledge_items < total
+        min_coverage: Min coverage za filtriranje (default 0.0 = uzmi sve)
+        sample_size: Sample N students (None = use ALL)
+        stratify: Stratify sampling by T_Grade
+        use_matrix_completion: Ako True, koristi ALS matrix completion za NA vrednosti
+        als_rank: Rank za low-rank factorization (više = preciznije, sporije)
+        als_iterations: Broj ALS iteracija
+        
+    Returns:
+        (response_patterns, metadata)
+    """
+    
+    sep = _infer_delimiter(path)
+    logger.info(f'\n{"="*80}')
+    logger.info(f'LOADING DATA WITH MATRIX COMPLETION')
+    logger.info(f'{"="*80}')
+    logger.info(f'File: {Path(path).name}')
+    logger.info(f'Separator: {repr(sep)}')
+    
+    df = pd.read_csv(path, sep=sep)
+    logger.info(f'Loaded: {len(df):,} rows × {len(df.columns)} columns')
+    
+    # Identify binary response columns
+    all_binary = _identify_binary_columns(df)
+    logger.info(f'Binary response columns: {len(all_binary)}')
+    
+    if not all_binary:
+        raise ValueError('No binary response columns found.')
+    
+    # Calculate coverage
+    coverage = _get_column_coverage(df, all_binary)
+    logger.info(f'Coverage stats: min={coverage.min():.1f}%, mean={coverage.mean():.1f}%, max={coverage.max():.1f}%')
+    
+    # Select columns (MOŽE biti SVE ako min_coverage=0)
+    if min_coverage > 0:
+        selected_cols = _select_columns(coverage, min_coverage=min_coverage, max_items=knowledge_items)
+        logger.info(f'Filtered to {len(selected_cols)} columns with {min_coverage}%+ coverage')
     else:
-        included_cols = list(range(ncols))[:knowledge_items]
+        selected_cols = all_binary[:knowledge_items] if knowledge_items else all_binary
+        logger.info(f'Using ALL {len(selected_cols)} columns (no coverage filter)')
+    
+    if not selected_cols:
+        raise ValueError(f'No columns selected. Lower min_coverage or check data.')
+    
+    # Sample students if requested (ali default je None = SVI)
+    if sample_size and sample_size < len(df):
+        logger.info(f'Sampling {sample_size:,} students...')
+        df = _stratified_sample(df, sample_size, stratify_col='T_Grade' if stratify else None)
+    else:
+        logger.info(f'Using ALL {len(df):,} students (no sampling)')
+    
+    # ============================================================
+    # MATRIX COMPLETION - KLJUČNI DEO!
+    # ============================================================
+    
+    if use_matrix_completion:
+        logger.info(f'\n{"="*80}')
+        logger.info(f'MATRIX COMPLETION (ALS)')
+        logger.info(f'{"="*80}')
+        
+        # Konvertuj u numpy array (NaN ostaju NaN)
+        X_sparse = df[selected_cols].values.astype(float)  # NaN ostaje NaN
+        
+        n_students, n_items = X_sparse.shape
+        n_missing = np.sum(np.isnan(X_sparse))
+        sparsity_pct = 100.0 * n_missing / (n_students * n_items)
+        
+        logger.info(f'Sparse matrix: {n_students:,} students × {n_items} items')
+        logger.info(f'Missing values: {n_missing:,} / {n_students * n_items:,} ({sparsity_pct:.1f}% sparse)')
+        
+        # ALS Matrix Completion
+        X_completed = matrix_completion_als(
+            X_sparse, 
+            rank=als_rank,
+            max_iter=als_iterations,
+            reg_lambda=0.1,
+            verbose=True
+        )
+        
+        # Binarizuj (>= 0.5 = 1, < 0.5 = 0)
+        threshold = 0.5
+        X_binary = (X_completed >= threshold).astype(int)
+        
+        logger.info(f'Binarization: values >= {threshold} → 1, else → 0')
+        logger.info(f'Completed matrix: {np.sum(X_binary == 1):,} ones, {np.sum(X_binary == 0):,} zeros')
+        
+        # Konvertuj u response patterns
+        response_patterns = [''.join(str(val) for val in row) for row in X_binary]
+        
+    else:
+        # FALLBACK: Stari pristup (fillna(0))
+        logger.info('Using simple fillna(0) approach (not recommended for sparse data)')
+        df_filled = df[selected_cols].fillna(0).astype(int)
+        response_patterns = df_filled.apply(lambda row: ''.join(str(val) for val in row), axis=1).tolist()
+    
+    # Statistics
+    unique_patterns = len(set(response_patterns))
+    logger.info(f'\n{"="*80}')
+    logger.info(f'FINAL DATASET')
+    logger.info(f'{"="*80}')
+    logger.info(f'Total patterns: {len(response_patterns):,}')
+    logger.info(f'Unique patterns: {unique_patterns:,} ({100*unique_patterns/len(response_patterns):.1f}% diversity)')
+    logger.info(f'Pattern length: {len(response_patterns[0])} items')
+    logger.info(f'{"="*80}\n')
+    
+    metadata = {
+        'total_rows': len(df),
+        'selected_columns': selected_cols,
+        'num_items': len(selected_cols),
+        'valid_patterns': len(response_patterns),
+        'unique_patterns': unique_patterns,
+        'coverage_mean': coverage[selected_cols].mean(),
+        'coverage_min': coverage[selected_cols].min(),
+    }
 
-    df = df.iloc[:, included_cols]
-
-    response_patterns = []
-    for _, *row in df.itertuples():
-        response = ''.join([str(i) for i in row])
-        response_patterns.append(response)
-    return response_patterns
+    return response_patterns, metadata
 
 
-def parse_config_file(config_filename: str) -> dict:
+def parse_config_file(config_filename: str) -> configparser.ConfigParser:
     config = configparser.ConfigParser()
     config.read(config_filename)
-    return config['LearningSpaceGenome']
+    return config
+
+
+def _materialize_config(config: configparser.ConfigParser,
+                        base_path: str,
+                        knowledge_items: int) -> str:
+    """Ensure NEAT config has the resolved knowledge_items value."""
+    current = config['LearningSpaceGenome'].get('knowledge_items')
+    if current == str(knowledge_items):
+        return base_path
+
+    config_copy = configparser.ConfigParser()
+    config_copy.read_dict({section: dict(config[section]) for section in config.sections()})
+    config_copy['LearningSpaceGenome']['knowledge_items'] = str(knowledge_items)
+
+    tmp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False)
+    config_copy.write(tmp_file)
+    tmp_file.close()
+    return tmp_file.name
 
 
 def parse_command_line_args() -> argparse.Namespace:
@@ -250,10 +565,56 @@ if __name__ == '__main__':
     args = parse_command_line_args()
     config = parse_config_file(config_filename=args.config)
 
-    num_items = int(config['knowledge_items'])
-    response_patterns = load_response_patterns(path=args.data_path,
-                                               knowledge_items=num_items,
-                                               randomize=args.randomize_items)
+    num_items = _parse_knowledge_items(config['LearningSpaceGenome'].get('knowledge_items'))
+    
+    # ============================================================
+    # MATRIX COMPLETION - KORISTI SVE STUDENTE I SVA PITANJA!
+    # ============================================================
+    response_patterns, metadata = load_response_patterns(
+        path=args.data_path,
+        knowledge_items=num_items,          # None = sve kolone, ili broj ako je u config-u
+        randomize=args.randomize_items,
+        min_coverage=0.0,                   # 0% = ne odbacuj kolone zbog coverage-a!
+        sample_size=None,                   # None = SVI studenti!
+        stratify=True,
+        use_matrix_completion=True,         # KLJUČNO: Matrix Completion ALS
+        als_rank=30,                        # Latent dimensionality
+        als_iterations=30                   # Broj ALS iteracija
+    )
+
+    logger.info(f'\n=== Data Loading Summary ===')
+    logger.info(f'Items selected: {metadata["num_items"]}')
+    logger.info(f'Valid students: {metadata["valid_patterns"]:,}')
+    logger.info(f'Unique patterns: {metadata["unique_patterns"]:,}')
+    logger.info(f'Mean coverage: {metadata["coverage_mean"]:.1f}%')
+
+    # Verify config knowledge_items matches actual data
+    actual_num_items = metadata['num_items']
+    config_knowledge_items_str = config['LearningSpaceGenome'].get('knowledge_items', '').strip().lower()
+    
+    # Parse config value (može biti 'all', 'auto', ili broj)
+    if config_knowledge_items_str in ('all', 'auto', ''):
+        config_num_items = None  # Auto-detect
+    else:
+        config_num_items = int(config_knowledge_items_str)
+    
+    if config_num_items is None or config_num_items != actual_num_items:
+        logger.info(f'Config has {config_num_items or "auto"} items, using {actual_num_items} from data')
+        
+        # Create temporary config with correct number of items
+        import tempfile
+        config_copy = configparser.ConfigParser()
+        config_copy.read_dict({section: dict(config[section]) for section in config.sections()})
+        config_copy['LearningSpaceGenome']['knowledge_items'] = str(actual_num_items)
+        
+        tmp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False)
+        config_copy.write(tmp_file)
+        tmp_file.close()
+        config_file_to_use = tmp_file.name
+        logger.info(f'Using temporary config: {config_file_to_use}')
+    else:
+        config_file_to_use = args.config
+        logger.info(f'Config matches data ({actual_num_items} items)')
 
     # In greedy mode, run NEAT for unlimited generations.
     generations = None if args.greedy else args.generations
@@ -264,7 +625,7 @@ if __name__ == '__main__':
         print('\nRunning NEAT for {} generations.\n'.format(generations))
 
     optimal_ls = run_neat(generations=generations,
-                          config_filename=args.config,
+                          config_filename=config_file_to_use,
                           responses=response_patterns,
                           early_stopping_patience=args.patience,
                           verbose=not args.silent,
