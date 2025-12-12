@@ -55,8 +55,10 @@ class KnowledgeState:
         return '{' + ', '.join(self._to_letters()) + '}'
 
     def _to_letters(self) -> str:
+        # Za velike datasets (>52 itema), koristi brojeve umesto slova
+        max_letters = len(string.ascii_letters)  # 52
         return [
-            string.ascii_letters[i]
+            string.ascii_letters[i] if i < max_letters else f'item{i}'
             for i, bit in enumerate(self.to_bitstring())
             if bit == '1'
         ]
