@@ -19,13 +19,15 @@ class Evaluator(ABC):
 
     def __init__(self,
                  response_patterns: List[str],
-                 node_size_penalty: float = 25.6,
+                 node_size_penalty: float = 500.0,
                  valid_learning_space_weight: float = 256.0,
-                 use_vectorized: bool = True):
+                 use_vectorized: bool = True,
+                 max_learning_space_size: int = 300):
         self.response_patterns = response_patterns
         self.node_size_penalty = node_size_penalty
         self.valid_learning_space_weight = valid_learning_space_weight
         self.use_vectorized = use_vectorized
+        self.max_learning_space_size = max_learning_space_size
         
         # Konvertuj pattern stringove u numpy array za brže operacije
         if use_vectorized:
@@ -51,6 +53,12 @@ class Evaluator(ABC):
 
     def _set_fitness(self, genome, discrepancy):
         num_nodes, _ = genome.size()
+        
+        # Hard limit - ogromna kazna za prevelike learning spaces
+        if num_nodes > self.max_learning_space_size:
+            genome.fitness = -1e9 - num_nodes * 10000
+            return
+        
         size_fitness = num_nodes * self.node_size_penalty
         valid_ls_fitness = int(genome.is_valid()) * self.valid_learning_space_weight
 

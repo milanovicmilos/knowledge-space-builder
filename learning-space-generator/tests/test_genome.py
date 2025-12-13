@@ -1,6 +1,4 @@
-from lsg.gene import KnowledgeStateGene
-from lsg.genome import LearningSpaceGenome, LearningSpaceGenomeConfig
-from lsg.structure import KnowledgeState
+from lsg.algorithms.neat import KnowledgeStateGene, LearningSpaceGenome, LearningSpaceGenomeConfig, KnowledgeState
 
 
 class TestLearningSpaceGenome:
