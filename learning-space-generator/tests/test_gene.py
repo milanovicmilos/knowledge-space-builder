@@ -2,8 +2,7 @@ import random
 
 import pytest
 
-from lsg.gene import KnowledgeStateGene
-from lsg.structure import KnowledgeState
+from lsg.algorithms.neat import KnowledgeStateGene, KnowledgeState
 
 
 class TestKnowledgeStateGene:

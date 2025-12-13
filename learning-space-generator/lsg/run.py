@@ -5,6 +5,8 @@ import tempfile
 from typing import List, Optional, Tuple
 import logging
 from pathlib import Path
+import hashlib
+import pickle
 
 import neat
 import pandas as pd
@@ -20,7 +22,9 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
-from . import paths, evaluation, reporting, genome, output_utils
+from . import paths, output_utils
+from .algorithms.neat import run_neat, LearningSpaceGenome
+from .algorithms.iita import run_iita_analysis
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
@@ -121,69 +125,6 @@ def matrix_completion_als(X: np.ndarray,
     logger.info(f"  Matrix completion finished. Reconstructed matrix range: [{X_completed.min():.3f}, {X_completed.max():.3f}]")
     
     return X_completed
-
-
-def run_neat(generations: int,
-             config_filename: str,
-             responses: List[str],
-             early_stopping_patience: int,
-             verbose: bool = False,
-             plot_best: bool = False,
-             parallel: bool = False,
-             is_greedy: bool = False) -> genome.LearningSpaceGenome:
-    config = neat.Config(genome.LearningSpaceGenome,
-                         neat.DefaultReproduction,
-                         neat.DefaultSpeciesSet,
-                         neat.DefaultStagnation,
-                         config_filename)
-
-    population = neat.Population(config)
-
-    early_stopper = reporting.EarlyStoppingReporter(patience=early_stopping_patience,
-                                                    is_greedy=is_greedy)
-    population.add_reporter(early_stopper)
-
-    fitness_term_stopper = reporting.FitnessTerminationReporter(threshold=-0.5)
-    population.add_reporter(fitness_term_stopper)
-
-    if verbose:
-        tqdm_reporter = reporting.TqdmReporter(total_generations=generations)
-        population.add_reporter(tqdm_reporter)
-
-    if plot_best:
-        plot_reporter = reporting.PlotReporter()
-        population.add_reporter(plot_reporter)
-
-    if parallel:
-        evaluator = evaluation.ParallelEvaluator(responses)
-    else:
-        evaluator = evaluation.SerialEvaluator(responses)
-
-    try:
-        optimal_ls = population.run(evaluator.evaluate, generations)
-    except reporting.EarlyStoppingException as exception:
-        optimal_ls = exception.best_genome
-
-        if verbose:
-            # Excplicily close tqdm progress bar to fix printing to stdout.
-            tqdm_reporter.close()
-
-        if is_greedy:
-            print('\nGreedy algorithm constructed learning space successfully.')
-        else:
-            print('\nNo fitness improvement '
-                  'for {} generations.'.format(early_stopping_patience))
-    except reporting.TerminationThresholdReachedException as exception:
-        optimal_ls = exception.best_genome
-
-        if verbose:
-            # Excplicily close tqdm progress bar to fix printing to stdout.
-            tqdm_reporter.close()
-
-        print('\nTermination threshold reached. '
-              'Found genome with {} discrepancy'.format(optimal_ls.discrepancy()))
-
-    return optimal_ls
 
 
 def save_learning_space_graph(learning_space, outfile='graph.png') -> None:
@@ -360,6 +301,26 @@ def _stratified_sample(df: pd.DataFrame,
     return df.sample(n=min(sample_size, len(df)), random_state=42)
 
 
+def _get_cache_path(data_path: str, 
+                   selected_cols: List[str],
+                   sample_size: Optional[int],
+                   als_rank: int,
+                   als_iterations: int) -> Path:
+    """
+    Generiše jedinstvenu cache putanju za completed matrix.
+    
+    Cache key: hash(data_path + selected_columns + sample_size + ALS params)
+    """
+    cache_dir = Path('output/cache')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Kreiraj jedinstveni hash od parametara
+    cache_key = f"{data_path}|{sorted(selected_cols)}|{sample_size}|{als_rank}|{als_iterations}"
+    cache_hash = hashlib.md5(cache_key.encode()).hexdigest()
+    
+    return cache_dir / f"matrix_completion_{cache_hash}.npy"
+
+
 def load_response_patterns(path: str,
                            knowledge_items: Optional[int],
                            randomize: bool = True,
@@ -368,7 +329,8 @@ def load_response_patterns(path: str,
                            stratify: bool = True,
                            use_matrix_completion: bool = True,
                            als_rank: int = 30,
-                           als_iterations: int = 30) -> Tuple[List[str], dict]:
+                           als_iterations: int = 30,
+                           use_cache: bool = True) -> Tuple[List[str], dict]:
     """
     Load response patterns sa NAPREDNOM Matrix Completion metodom.
     
@@ -448,14 +410,30 @@ def load_response_patterns(path: str,
         logger.info(f'Sparse matrix: {n_students:,} students × {n_items} items')
         logger.info(f'Missing values: {n_missing:,} / {n_students * n_items:,} ({sparsity_pct:.1f}% sparse)')
         
-        # ALS Matrix Completion
-        X_completed = matrix_completion_als(
-            X_sparse, 
-            rank=als_rank,
-            max_iter=als_iterations,
-            reg_lambda=0.1,
-            verbose=True
-        )
+        # Check cache
+        cache_path = _get_cache_path(path, selected_cols, sample_size, als_rank, als_iterations)
+        
+        if use_cache and cache_path.exists():
+            logger.info(f'\n✓ Loading completed matrix from cache: {cache_path.name}')
+            X_completed = np.load(cache_path)
+            logger.info(f'  Matrix shape: {X_completed.shape}')
+        else:
+            if use_cache:
+                logger.info(f'\nCache not found - running ALS...')
+            
+            # ALS Matrix Completion
+            X_completed = matrix_completion_als(
+                X_sparse, 
+                rank=als_rank,
+                max_iter=als_iterations,
+                reg_lambda=0.1,
+                verbose=True
+            )
+            
+            # Save to cache
+            if use_cache:
+                np.save(cache_path, X_completed)
+                logger.info(f'\n✓ Cached completed matrix to: {cache_path}')
         
         # Binarizuj (>= 0.5 = 1, < 0.5 = 0)
         threshold = 0.5
@@ -521,8 +499,8 @@ def _materialize_config(config: configparser.ConfigParser,
 
 
 def parse_command_line_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser('Run NEAT algorithm to get '
-                                     'the optimal learning space from response patterns.')
+    parser = argparse.ArgumentParser('Run learning space generation algorithms (NEAT or IITA) '
+                                     'to analyze response patterns and generate learning structures.')
     parser.add_argument('-c', '--config',
                         type=str, default=paths.DEFAULT_CONFIG_PATH,
                         help='Path to config file.')
@@ -531,30 +509,39 @@ def parse_command_line_args() -> argparse.Namespace:
                         help='Path to the CSV file with response patterns.')
     parser.add_argument('-g', '--generations',
                         type=int, default=DEFAULT_GENERATIONS,
-                        help='Number of generations.')
+                        help='[NEAT only] Number of generations.')
     parser.add_argument('-t', '--patience',
                         type=int, default=EARLY_STOPPING_PATIENCE,
-                        help='Number of generations without fitness improvement'
+                        help='[NEAT only] Number of generations without fitness improvement '
                              'before algorithm stops.')
     parser.add_argument('-i', '--png',
                         type=str,
                         help='Output filename (or path) for learning space graph PNG image. '
                              'If only filename given, saves to output/visualizations/.')
     parser.add_argument('-l', '--plot', action='store_true',
-                        help='Show the best learning space during evolution.')
+                        help='[NEAT only] Show the best learning space during evolution.')
     parser.add_argument('-j', '--json',
                         type=str, default='learning_space.json',
                         help='Output filename (or path) for learning space JSON. '
                              'If only filename given, saves to output/data/.')
     parser.add_argument('-p', '--parallel', action='store_true',
-                        help='Enable parallel genome evaluation.')
+                        help='[NEAT only] Enable parallel genome evaluation.')
     parser.add_argument('-s', '--silent', action='store_true',
                         help='Supress any output to stdout.')
     parser.add_argument('-r', '--randomize-items', action='store_true',
                         help='Randomly load question columns from responses data file.')
     parser.add_argument('-y', '--greedy', action='store_true',
-                        help='Run algorithm until the first complete, valid learning'
+                        help='[NEAT only] Run algorithm until the first complete, valid learning '
                              'space is created.')
+    parser.add_argument('--use-iita', action='store_true',
+                        help='Use IITA (Inductive Item Tree Analysis) instead of NEAT. '
+                             'IITA is faster and works better on large domains (100+ items).')
+    parser.add_argument('--iita-max-diff', type=float, default=0.05,
+                        help='IITA: Maximum diff threshold for prerequisite relations (default: 0.05).')
+    parser.add_argument('--clear-cache', action='store_true',
+                        help='Clear matrix completion cache before running.')
+    parser.add_argument('--no-cache', action='store_true',
+                        help='Disable matrix completion caching.')
     return parser.parse_args()
 
 
@@ -563,6 +550,15 @@ if __name__ == '__main__':
     output_utils.ensure_output_dirs()
     
     args = parse_command_line_args()
+    
+    # Clear cache if requested
+    if args.clear_cache:
+        cache_dir = Path('output/cache')
+        if cache_dir.exists():
+            import shutil
+            shutil.rmtree(cache_dir)
+            logger.info(f'✓ Cleared cache directory: {cache_dir}')
+    
     config = parse_config_file(config_filename=args.config)
 
     num_items = _parse_knowledge_items(config['LearningSpaceGenome'].get('knowledge_items'))
@@ -579,7 +575,8 @@ if __name__ == '__main__':
         stratify=True,
         use_matrix_completion=True,         # KLJUČNO: Matrix Completion ALS
         als_rank=30,                        # Latent dimensionality
-        als_iterations=30                   # Broj ALS iteracija
+        als_iterations=30,                  # Broj ALS iteracija
+        use_cache=not args.no_cache         # Cache enabled by default
     )
 
     logger.info(f'\n=== Data Loading Summary ===')
@@ -588,63 +585,123 @@ if __name__ == '__main__':
     logger.info(f'Unique patterns: {metadata["unique_patterns"]:,}')
     logger.info(f'Mean coverage: {metadata["coverage_mean"]:.1f}%')
 
-    # Verify config knowledge_items matches actual data
     actual_num_items = metadata['num_items']
-    config_knowledge_items_str = config['LearningSpaceGenome'].get('knowledge_items', '').strip().lower()
     
-    # Parse config value (može biti 'all', 'auto', ili broj)
-    if config_knowledge_items_str in ('all', 'auto', ''):
-        config_num_items = None  # Auto-detect
-    else:
-        config_num_items = int(config_knowledge_items_str)
+    # ============================================================
+    # CHOOSE ALGORITHM: IITA or NEAT
+    # ============================================================
     
-    if config_num_items is None or config_num_items != actual_num_items:
-        logger.info(f'Config has {config_num_items or "auto"} items, using {actual_num_items} from data')
+    if args.use_iita:
+        # Warn about unused NEAT-only arguments
+        neat_only_args = []
+        if args.parallel:
+            neat_only_args.append('--parallel')
+        if args.plot:
+            neat_only_args.append('--plot')
+        if args.greedy:
+            neat_only_args.append('--greedy')
+        if args.patience != EARLY_STOPPING_PATIENCE:
+            neat_only_args.append('--patience')
+        if args.generations != DEFAULT_GENERATIONS:
+            neat_only_args.append('--generations')
         
-        # Create temporary config with correct number of items
-        import tempfile
-        config_copy = configparser.ConfigParser()
-        config_copy.read_dict({section: dict(config[section]) for section in config.sections()})
-        config_copy['LearningSpaceGenome']['knowledge_items'] = str(actual_num_items)
+        if neat_only_args:
+            logger.warning(f"⚠️  NEAT-only arguments will be ignored with --use-iita: {', '.join(neat_only_args)}")
         
-        tmp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False)
-        config_copy.write(tmp_file)
-        tmp_file.close()
-        config_file_to_use = tmp_file.name
-        logger.info(f'Using temporary config: {config_file_to_use}')
+        # ============================================================
+        # IITA (INDUCTIVE ITEM TREE ANALYSIS)
+        # ============================================================
+        logger.info(f'\n{"="*80}')
+        logger.info('USING IITA (Inductive Item Tree Analysis)')
+        logger.info(f'{"="*80}')
+        logger.info('IITA is designed for large domains and finds prerequisite structures.')
+        logger.info(f'Items: {actual_num_items}')
+        logger.info(f'Max diff threshold: {args.iita_max_diff}')
+        logger.info(f'{"="*80}\n')
+        
+        # Run IITA analysis
+        png_path = None
+        if args.png:
+            png_path = args.png if '/' in args.png or '\\' in args.png else output_utils.get_visualization_path(args.png)
+        
+        iita_analyzer = run_iita_analysis(
+            response_patterns=response_patterns,
+            item_names=metadata['selected_columns'],
+            min_support=0.01,
+            max_diff=args.iita_max_diff,
+            output_json=None,  # Will save later
+            png_output=png_path,
+            verbose=not args.silent
+        )
+        
+        # Save results
+        if args.json:
+            json_path = args.json if '/' in args.json or '\\' in args.json else output_utils.get_data_path(args.json)
+            iita_analyzer.to_json(json_path)
+            print(f"\nIITA prerequisite structure saved to '{json_path}'")
+        
+        logger.info("\n✓ IITA analysis complete!")
+        
     else:
-        config_file_to_use = args.config
-        logger.info(f'Config matches data ({actual_num_items} items)')
+        # ============================================================
+        # NEAT (ORIGINAL ALGORITHM)
+        # ============================================================
+        # Verify config knowledge_items matches actual data
+        config_knowledge_items_str = config['LearningSpaceGenome'].get('knowledge_items', '').strip().lower()
+    
+        # Parse config value (može biti 'all', 'auto', ili broj)
+        if config_knowledge_items_str in ('all', 'auto', ''):
+            config_num_items = None  # Auto-detect
+        else:
+            config_num_items = int(config_knowledge_items_str)
+    
+        if config_num_items is None or config_num_items != actual_num_items:
+            logger.info(f'Config has {config_num_items or "auto"} items, using {actual_num_items} from data')
+            
+            # Create temporary config with correct number of items
+            import tempfile
+            config_copy = configparser.ConfigParser()
+            config_copy.read_dict({section: dict(config[section]) for section in config.sections()})
+            config_copy['LearningSpaceGenome']['knowledge_items'] = str(actual_num_items)
+        
+            tmp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False)
+            config_copy.write(tmp_file)
+            tmp_file.close()
+            config_file_to_use = tmp_file.name
+            logger.info(f'Using temporary config: {config_file_to_use}')
+        else:
+            config_file_to_use = args.config
+            logger.info(f'Config matches data ({actual_num_items} items)')
 
-    # In greedy mode, run NEAT for unlimited generations.
-    generations = None if args.greedy else args.generations
+        # In greedy mode, run NEAT for unlimited generations.
+        generations = None if args.greedy else args.generations
 
-    if args.greedy:
-        print('\nRunning greedy NEAT.\n')
-    else:
-        print('\nRunning NEAT for {} generations.\n'.format(generations))
+        if args.greedy:
+            print('\nRunning greedy NEAT.\n')
+        else:
+            print('\nRunning NEAT for {} generations.\n'.format(generations))
 
-    optimal_ls = run_neat(generations=generations,
-                          config_filename=config_file_to_use,
-                          responses=response_patterns,
-                          early_stopping_patience=args.patience,
-                          verbose=not args.silent,
-                          plot_best=args.plot,
-                          parallel=args.parallel,
-                          is_greedy=args.greedy)
+        optimal_ls = run_neat(generations=generations,
+                              config_filename=config_file_to_use,
+                              responses=response_patterns,
+                              early_stopping_patience=args.patience,
+                              verbose=not args.silent,
+                              plot_best=args.plot,
+                              parallel=args.parallel,
+                              is_greedy=args.greedy)
 
-    if not optimal_ls.is_valid():
-        print('\n[WARNING] Learning space is not valid.')
+        if not optimal_ls.is_valid():
+            print('\n[WARNING] Learning space is not valid.')
 
-    if args.json:
-        # Use output/data/ directory if no path specified
-        json_path = args.json if '/' in args.json or '\\' in args.json else output_utils.get_data_path(args.json)
-        with open(json_path, 'w') as fp:
-            fp.write(optimal_ls.to_json())
-            print(f"\nThe best learning space graph JSON saved to '{json_path}'")
+        if args.json:
+            # Use output/data/ directory if no path specified
+            json_path = args.json if '/' in args.json or '\\' in args.json else output_utils.get_data_path(args.json)
+            with open(json_path, 'w') as fp:
+                fp.write(optimal_ls.to_json())
+                print(f"\nThe best learning space graph JSON saved to '{json_path}'")
 
-    if args.png:
-        # Use output/visualizations/ directory if no path specified
-        png_path = args.png if '/' in args.png or '\\' in args.png else output_utils.get_visualization_path(args.png)
-        save_learning_space_graph(learning_space=optimal_ls, outfile=png_path)
-        print(f"The best learning space graph PNG saved to '{png_path}'")
+        if args.png:
+            # Use output/visualizations/ directory if no path specified
+            png_path = args.png if '/' in args.png or '\\' in args.png else output_utils.get_visualization_path(args.png)
+            save_learning_space_graph(learning_space=optimal_ls, outfile=png_path)
+            print(f"The best learning space graph PNG saved to '{png_path}'")

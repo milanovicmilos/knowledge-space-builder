@@ -1,4 +1,4 @@
-from lsg.structure import KnowledgeState
+from lsg.algorithms.neat import KnowledgeState
 
 
 class TestKnowledgeState:
