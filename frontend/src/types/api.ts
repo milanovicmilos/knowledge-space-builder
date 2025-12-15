@@ -10,12 +10,27 @@ export interface Upload {
 }
 
 export interface TaskParameters {
+  // Algorithm selection
   use_iita: boolean;
+  
+  // IITA options
   iita_max_diff: number;
+  
+  // NEAT options
   generations: number;
   patience: number;
   parallel: boolean;
+  greedy: boolean;
+  plot: boolean;
+  
+  // Data options
+  randomize_items: boolean;
   use_matrix_completion: boolean;
+  clear_cache: boolean;
+  
+  // Output options
+  generate_png: boolean;
+  png_filename?: string | null;
 }
 
 export interface Task {
@@ -26,6 +41,19 @@ export interface Task {
   parameters: TaskParameters;
   progress_percent: number;
   current_generation: number | null;
+  progress_details: {
+    stage?: string;
+    current_fitness?: number;
+    best_fitness?: number;
+    generation?: number;
+    max_generation?: number;
+    iteration?: number;
+    max_iteration?: number;
+    rmse?: number;
+    current_item?: number;
+    total_items?: number;
+    eta_seconds?: number;
+  } | null;
   error_message: string | null;
   created_at: string;
   started_at: string | null;
@@ -45,5 +73,6 @@ export interface Result {
   final_generation: number | null;
   execution_time_seconds: number | null;
   metadata: Record<string, any> | null;
+  result_metadata: Record<string, any> | null;
   created_at: string;
 }

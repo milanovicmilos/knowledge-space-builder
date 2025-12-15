@@ -24,16 +24,31 @@ async def get_result(
 @router.get("/results/{task_id}/download")
 async def download_result(
     task_id: int,
+    format: str = 'json',
     db: Session = Depends(get_db)
 ):
-    """Download result JSON file"""
+    """Download result file (JSON or PNG)"""
     result = db.query(Result).filter(Result.task_id == task_id).first()
     if not result:
         raise HTTPException(404, "Result not found")
     
-    file_path = storage_service.get_file_path(result.graph_storage_key)
-    return FileResponse(
-        path=file_path,
-        media_type='application/json',
-        filename=f'result_{task_id}.json'
-    )
+    if format == 'png':
+        # Get PNG from metadata
+        png_key = result.result_metadata.get('png_key') if result.result_metadata else None
+        if not png_key:
+            raise HTTPException(404, "PNG visualization not available for this result")
+        
+        file_path = storage_service.get_file_path(png_key)
+        return FileResponse(
+            path=file_path,
+            media_type='image/png',
+            filename=f'learning_space_{task_id}.png'
+        )
+    else:
+        # Default: JSON
+        file_path = storage_service.get_file_path(result.graph_storage_key)
+        return FileResponse(
+            path=file_path,
+            media_type='application/json',
+            filename=f'learning_space_{task_id}.json'
+        )

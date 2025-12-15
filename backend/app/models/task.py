@@ -15,6 +15,7 @@ class Task(Base):
     parameters = Column(JSONB, nullable=False)
     progress_percent = Column(Integer, default=0)
     current_generation = Column(Integer)
+    progress_details = Column(JSONB)  # Real-time progress info
     error_message = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     started_at = Column(DateTime(timezone=True))
