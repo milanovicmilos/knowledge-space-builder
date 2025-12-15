@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { FiUpload } from 'react-icons/fi';
 import { uploadCSV } from '../api/client';
 import type { Upload } from '../types/api';
+import './UploadForm.css';
 
 interface UploadFormProps {
   onUploadComplete?: (upload: Upload) => void;
@@ -10,6 +12,10 @@ export function UploadForm({ onUploadComplete }: UploadFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedMeta = file
+    ? `${(file.size / 1024).toFixed(1)} KB · ${file.type || 'text/csv'}`
+    : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,20 +36,47 @@ export function UploadForm({ onUploadComplete }: UploadFormProps) {
   };
 
   return (
-    <div className="upload-form">
-      <h2>Upload CSV File</h2>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="file"
-          accept=".csv"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-          disabled={uploading}
-        />
-        <button type="submit" disabled={!file || uploading}>
-          {uploading ? 'Uploading...' : 'Upload'}
-        </button>
+    <div className="panel upload-card">
+      <div className="panel-head">
+        <div>
+          <p className="kicker">Step 1 · Data upload</p>
+          <h3>Import CSV dataset</h3>
+          <p className="hint">Assessment data (rows = subjects, columns = items, values 0/1).</p>
+        </div>
+        <div className="pill soft">Server-side validation</div>
+      </div>
+
+      <form className="upload-form" onSubmit={handleSubmit}>
+        <label className="dropzone">
+          <input
+            type="file"
+            accept=".csv"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            disabled={uploading}
+          />
+          {file ? (
+            <div className="file-meta">
+              <span className="file-name">{file.name}</span>
+              <span className="file-size">{selectedMeta}</span>
+            </div>
+          ) : (
+            <div>
+              <p className="drop-title">Drag and drop or select CSV</p>
+              <p className="drop-sub">Max 100MB · UTF-8 · delimiter auto-detected</p>
+            </div>
+          )}
+        </label>
+
+        <div className="upload-actions">
+          <button type="submit" className="primary-btn" disabled={!file || uploading}>
+            <FiUpload size={16} style={{ marginRight: '0.5rem' }} />
+            {uploading ? 'Uploading...' : 'Upload and validate'}
+          </button>
+          <p className="hint">Data is not persisted; used only for the current analysis session.</p>
+        </div>
       </form>
-      {error && <div className="error">{error}</div>}
+
+      {error && <div className="error-banner">{error}</div>}
     </div>
   );
 }

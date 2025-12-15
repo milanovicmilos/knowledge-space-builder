@@ -33,13 +33,15 @@ class StorageService:
         """Get absolute path to file"""
         return str(self.storage_path / storage_key)
     
-    def save_result(self, content: str, task_id: int, filename: str) -> str:
+    def save_result(self, content: str | bytes, task_id: int, filename: str) -> str:
         """Save result file and return storage key"""
         storage_key = f"results/{task_id}/{filename}"
         full_path = self.storage_path / storage_key
         full_path.parent.mkdir(parents=True, exist_ok=True)
         
-        with open(full_path, 'w') as f:
+        # Use binary mode for bytes, text mode for str
+        mode = 'wb' if isinstance(content, bytes) else 'w'
+        with open(full_path, mode) as f:
             f.write(content)
         
         return storage_key
