@@ -20,6 +20,7 @@ interface GraphVisualizationProps {
 export function GraphVisualization({ graphData, algorithm }: GraphVisualizationProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // NEAT: knowledge states graph
   const convertNEATToFlow = (data: any) => {
@@ -29,8 +30,9 @@ export function GraphVisualization({ graphData, algorithm }: GraphVisualizationP
     let nodeId = 0;
     const stateToId: { [key: string]: string } = {};
 
-    // Create nodes for each knowledge state
-    Object.keys(data).forEach((state, index) => {
+    // Create nodes for each knowledge state (capped at 500 to prevent freeze)
+    const states = Object.keys(data).slice(0, 500);
+    states.forEach((state, index) => {
       const id = `node-${nodeId++}`;
       stateToId[state] = id;
       
@@ -58,7 +60,8 @@ export function GraphVisualization({ graphData, algorithm }: GraphVisualizationP
     });
 
     // Create edges between states
-    Object.entries(data).forEach(([source, targets]) => {
+    states.forEach((source) => {
+      const targets = data[source] || [];
       const sourceId = stateToId[source];
       (targets as string[]).forEach((target) => {
         if (stateToId[target]) {
@@ -83,11 +86,23 @@ export function GraphVisualization({ graphData, algorithm }: GraphVisualizationP
 
     const items = data.items || [];
     const prerequisites = data.prerequisites || {};
+    const levelCache = new Map<string, number>();
 
-    // Create nodes for each item
-    items.forEach((item: string, index: number) => {
+    // Memoized level calculation to avoid exponential recursion
+    const getMemoizedLevel = (item: string): number => {
+      if (levelCache.has(item)) return levelCache.get(item)!;
       const prereqs = prerequisites[item] || [];
-      const level = calculateLevel(item, prerequisites);
+      const level = prereqs.length === 0
+        ? 0
+        : 1 + Math.max(...prereqs.map((p: string) => getMemoizedLevel(p)));
+      levelCache.set(item, level);
+      return level;
+    };
+
+    // Create nodes for each item (capped at 500)
+    items.slice(0, 500).forEach((item: string, index: number) => {
+      const prereqs = prerequisites[item] || [];
+      const level = getMemoizedLevel(item);
       
       const x = (index % 8) * 180;
       const y = level * 120;
@@ -126,40 +141,48 @@ export function GraphVisualization({ graphData, algorithm }: GraphVisualizationP
     return { nodes: flowNodes, edges: flowEdges };
   };
 
-  // Calculate depth level for IITA items
-  const calculateLevel = (item: string, prerequisites: any): number => {
-    const prereqs = prerequisites[item] || [];
-    if (prereqs.length === 0) return 0;
-    
-    return 1 + Math.max(...prereqs.map((p: string) => calculateLevel(p, prerequisites)));
-  };
-
-  // Initialize graph when data changes
+  // Initialize graph when data changes (deferred to prevent blocking UI)
   useEffect(() => {
     if (!graphData) return;
-    
-    const { nodes: flowNodes, edges: flowEdges } = algorithm === 'neat' 
-      ? convertNEATToFlow(graphData)
-      : convertIITAToFlow(graphData);
-    
-    setNodes(flowNodes);
-    setEdges(flowEdges);
+
+    setLoading(true);
+    // Defer heavy conversion to next tick to avoid blocking UI on large graphs
+    const timer = setTimeout(() => {
+      const { nodes: flowNodes, edges: flowEdges } = algorithm === 'neat' 
+        ? convertNEATToFlow(graphData)
+        : convertIITAToFlow(graphData);
+      
+      setNodes(flowNodes);
+      setEdges(flowEdges);
+      setLoading(false);
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [graphData, algorithm]);
 
   return (
     <div className="graph-visualization">
       <div className="graph-header">
-        <h2>📊 {algorithm === 'neat' ? 'Knowledge Space' : 'Prerequisite Relations'}</h2>
+        <h2>{algorithm === 'neat' ? 'Knowledge Space' : 'Prerequisite Relations'}</h2>
         <p className="graph-info">
           {nodes.length} nodes, {edges.length} edges
+          {nodes.length >= 500 && <span> (capped at 500 for performance)</span>}
+          {loading && <span> · Loading...</span>}
         </p>
       </div>
       
       <div className="graph-container">
+        {loading && (
+          <div className="graph-loading">
+            <div className="spinner" />
+            <p>Processing graph...</p>
+          </div>
+        )}
         <ReactFlow
           nodes={nodes}
           edges={edges}
           fitView
+          style={{ opacity: loading ? 0.5 : 1 }}
           attributionPosition="bottom-right"
         >
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
