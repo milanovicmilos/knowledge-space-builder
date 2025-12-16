@@ -1,0 +1,72 @@
+.upload-card {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.upload-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.dropzone {
+  border: 1px dashed rgba(255, 255, 255, 0.24);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  background: rgba(255, 255, 255, 0.02);
+  display: grid;
+  gap: var(--space-2);
+  cursor: pointer;
+  transition: border-color var(--base), transform var(--base);
+  position: relative;
+}
+
+.dropzone input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dropzone:hover {
+  border-color: var(--primary-strong);
+  transform: translateY(-1px);
+}
+
+.drop-title {
+  font-weight: 700;
+  color: var(--ink-strong);
+  font-size: var(--text-lg);
+}
+
+.drop-sub {
+  color: var(--muted);
+}
+
+.file-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.file-name {
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+
+.file-size {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.upload-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.hint {
+  max-width: 420px;
+}
