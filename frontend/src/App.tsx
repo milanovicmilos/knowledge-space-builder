@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { UploadForm } from './components/UploadForm';
 import { TaskForm } from './components/TaskForm';
 import { TaskStatus } from './components/TaskStatus';
+import { ResultsPanel } from './components/ResultsPanel';
 import type { Upload } from './types/api';
 import './App.css';
 
@@ -29,11 +30,12 @@ function App() {
   const [currentUpload, setCurrentUpload] = useState<Upload | null>(null);
   const [currentTaskId, setCurrentTaskId] = useState<number | null>(null);
 
-  const stage: Stage = !currentUpload
-    ? 'upload'
-    : currentTaskId
+  // Prioritize monitor if a task is selected, even without a current upload
+  const stage: Stage = currentTaskId
     ? 'monitor'
-    : 'configure';
+    : currentUpload
+    ? 'configure'
+    : 'upload';
 
   const handleUploadComplete = (upload: Upload) => {
     setCurrentUpload(upload);
@@ -137,6 +139,9 @@ function App() {
               <TaskStatus taskId={currentTaskId} onReset={handleReset} />
             </>
           )}
+
+          {/* Recent Results panel */}
+          <ResultsPanel onOpenTask={(taskId) => setCurrentTaskId(taskId)} />
         </section>
 
         <aside className="sidebar">

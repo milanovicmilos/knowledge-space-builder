@@ -12,6 +12,7 @@ export function UploadForm({ onUploadComplete }: UploadFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const MAX_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
 
   const selectedMeta = file
     ? `${(file.size / 1024).toFixed(1)} KB · ${file.type || 'text/csv'}`
@@ -25,11 +26,21 @@ export function UploadForm({ onUploadComplete }: UploadFormProps) {
     setError(null);
 
     try {
+      // Client-side size guard for quick feedback
+      if (file.size > MAX_SIZE_BYTES) {
+        setError('File exceeds 100MB limit. Please upload a smaller file.');
+        setUploading(false);
+        return;
+      }
       const upload = await uploadCSV(file);
       onUploadComplete?.(upload);
       setFile(null);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Upload failed');
+      if (err?.response?.status === 413) {
+        setError('File exceeds 100MB limit. Please upload a smaller file.');
+      } else {
+        setError(err?.response?.data?.detail || 'Upload failed');
+      }
     } finally {
       setUploading(false);
     }

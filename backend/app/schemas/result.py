@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 
 class ResultResponse(BaseModel):
@@ -20,3 +20,22 @@ class ResultResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class ResultListItem(BaseModel):
+    result_id: int
+    task_id: int
+    status: str
+    algorithm: str
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    upload_id: int
+    upload_filename: str
+    num_states: int | None = None
+    num_edges: int | None = None
+    has_png: bool = False
+
+
+class ResultsListResponse(BaseModel):
+    total: int
+    items: List[ResultListItem]

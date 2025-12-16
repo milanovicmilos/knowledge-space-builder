@@ -55,3 +55,25 @@ export const downloadResult = async (taskId: number) => {
   });
   return response.data;
 };
+
+// Results listing
+export const listResults = async (params?: {
+  limit?: number;
+  offset?: number;
+  algorithm?: 'neat' | 'iita' | string;
+  upload_id?: number;
+  date_from?: string; // ISO
+  date_to?: string;   // ISO
+}) => {
+  const { data } = await api.get('/results/results', { params });
+  return data as { total: number; items: Array<{
+    result_id: number; task_id: number; status: string; algorithm: string;
+    created_at: string; completed_at?: string | null; upload_id: number;
+    upload_filename: string; num_states?: number | null; num_edges?: number | null;
+    has_png: boolean;
+  }>};
+};
+
+export const deleteResult = async (taskId: number) => {
+  await api.delete(`/results/results/${taskId}`);
+};
