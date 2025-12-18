@@ -1,5 +1,40 @@
-# Global ignore rules
+# Python
 .venv/
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# Logs
+*.log
+
+# Output (project-specific)
+output/
+storage_data/
+
+# Docker volumes (if extracted)
+postgres_data/
+
+# Temporary files
+*.tmp
+*.bak
+.~*
+
+# GitHub Actions (keep workflows but ignore artifacts)
 .github/
