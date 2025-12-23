@@ -2,6 +2,7 @@ import argparse
 import configparser
 import random
 import tempfile
+import os
 from typing import List, Optional, Tuple
 import logging
 from pathlib import Path
@@ -12,6 +13,8 @@ import neat
 import pandas as pd
 import numpy as np
 from scipy.sparse.linalg import svds
+from sklearn.cluster import KMeans, AgglomerativeClustering
+from sklearn.metrics import silhouette_score
 
 try:
     import matplotlib
@@ -24,107 +27,12 @@ except ImportError:
 
 from . import paths, output_utils
 from .algorithms.neat import run_neat, LearningSpaceGenome
-from .algorithms.iita import run_iita_analysis
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 EARLY_STOPPING_PATIENCE = 20
 DEFAULT_GENERATIONS = 15
-
-
-def matrix_completion_als(X: np.ndarray, 
-                          rank: int = 20,
-                          max_iter: int = 50,
-                          reg_lambda: float = 0.1,
-                          verbose: bool = True) -> np.ndarray:
-    """
-    Matrix Completion koristeći Alternating Least Squares (ALS).
-    
-    Rekonstruiše sparse matricu (sa NaN vrednostima) u complete matricu.
-    Ovo je moderan pristup iz recommender sistema - tretira problem kao
-    low-rank matrix factorization: X ≈ U @ V^T
-    
-    Args:
-        X: sparse matrica (n_rows, n_cols) sa NaN gde nedostaju podaci
-        rank: dimenzionalnost latentnog prostora (d)
-        max_iter: broj ALS iteracija
-        reg_lambda: L2 regularizacija
-        verbose: loguj progress
-        
-    Returns:
-        Kompletna matrica (n_rows, n_cols) bez NaN vrednosti
-        
-    Matematika:
-        - Minimizuje: ||P_Ω(X - UV^T)||² + λ(||U||² + ||V||²)
-        - gde je Ω skup poznatih elemenata
-        - Alternira između fiksiranja U i optimizovanja V, i obrnuto
-    """
-    logger.info(f"Matrix Completion ALS: shape={X.shape}, rank={rank}, iterations={max_iter}")
-    
-    n_rows, n_cols = X.shape
-    
-    # Maska gde NISU NaN (poznate vrednosti)
-    mask = ~np.isnan(X)
-    n_observed = np.sum(mask)
-    sparsity = 100.0 * (1 - n_observed / (n_rows * n_cols))
-    logger.info(f"  Observed: {n_observed:,} / {n_rows * n_cols:,} ({100-sparsity:.1f}% dense, {sparsity:.1f}% sparse)")
-    
-    # Inicijalizuj U i V random malim vrednostima
-    U = np.random.randn(n_rows, rank) * 0.01
-    V = np.random.randn(n_cols, rank) * 0.01
-    
-    # Zameni NaN sa 0 za računanje (samo privremeno)
-    X_filled = np.where(mask, X, 0)
-    
-    for iteration in range(max_iter):
-        # Ažuriraj U (fiksiran V)
-        for i in range(n_rows):
-            # Indeksi kolona gde i-ti red IMA podataka
-            cols_with_data = np.where(mask[i, :])[0]
-            if len(cols_with_data) == 0:
-                continue
-                
-            # V matrica za te kolone
-            V_i = V[cols_with_data, :]
-            
-            # ALS update za U[i]:
-            # U[i] = (V_i^T V_i + λI)^(-1) V_i^T X[i, cols]
-            A = V_i.T @ V_i + reg_lambda * np.eye(rank)
-            b = V_i.T @ X_filled[i, cols_with_data]
-            U[i, :] = np.linalg.solve(A, b)
-        
-        # Ažuriraj V (fiksiran U)
-        for j in range(n_cols):
-            # Indeksi redova gde j-ta kolona IMA podataka
-            rows_with_data = np.where(mask[:, j])[0]
-            if len(rows_with_data) == 0:
-                continue
-                
-            # U matrica za te redove
-            U_j = U[rows_with_data, :]
-            
-            # ALS update za V[j]:
-            # V[j] = (U_j^T U_j + λI)^(-1) U_j^T X[rows, j]
-            A = U_j.T @ U_j + reg_lambda * np.eye(rank)
-            b = U_j.T @ X_filled[rows_with_data, j]
-            V[j, :] = np.linalg.solve(A, b)
-        
-        # Računaj reconstruction error (samo na poznatim elementima)
-        if verbose and (iteration + 1) % 10 == 0:
-            X_reconstructed = U @ V.T
-            error = np.sqrt(np.mean((X_filled[mask] - X_reconstructed[mask]) ** 2))
-            logger.info(f"    Iteration {iteration+1}/{max_iter}: RMSE = {error:.4f}")
-    
-    # Finalna rekonstrukcija
-    X_completed = U @ V.T
-    
-    # Clip na [0, 1] jer su odgovori binarne vrednosti
-    X_completed = np.clip(X_completed, 0, 1)
-    
-    logger.info(f"  Matrix completion finished. Reconstructed matrix range: [{X_completed.min():.3f}, {X_completed.max():.3f}]")
-    
-    return X_completed
 
 
 def save_learning_space_graph(learning_space, outfile='graph.png') -> None:
@@ -268,6 +176,387 @@ def _get_column_coverage(df: pd.DataFrame, binary_cols: List[str]) -> pd.Series:
     return pd.Series(coverage).sort_values(ascending=False)
 
 
+def _auto_select_k(mask_matrix: np.ndarray, k_min: int = 2, k_max: int = 8) -> int:
+    """Pick K via silhouette on the availability mask; fallback to 2 on errors."""
+    best_k = max(k_min, 2)
+    best_score = -1.0
+    # Subsample rows if dataset is huge for speed
+    rows = mask_matrix
+    if rows.shape[0] > 10000:
+        rng = np.random.default_rng(42)
+        idx = rng.choice(rows.shape[0], size=10000, replace=False)
+        rows = rows[idx]
+    for k in range(k_min, min(k_max, rows.shape[0] - 1) + 1):
+        try:
+            km = KMeans(n_clusters=k, n_init=10, random_state=42)
+            labels = km.fit_predict(rows)
+            score = silhouette_score(rows, labels)
+            if score > best_score:
+                best_score = score
+                best_k = k
+        except Exception:
+            continue
+    return best_k
+
+
+def cluster_response_patterns(path: str,
+                              min_coverage_in_cluster: float = 0.7,
+                              max_k: int = 8,
+                              min_cluster_rows: int = 50,
+                              knowledge_items: Optional[int] = None,
+                              randomize: bool = True) -> Tuple[list, dict]:
+    """
+    Cluster students by answered-items mask to form denser submatrices (domains).
+    For each cluster, select columns with high in-cluster coverage, drop rows with
+    missing in those columns, and emit complete binary response patterns.
+
+    Returns: (clusters, global_metadata)
+    clusters: List of dicts {id, rows, cols, response_patterns, item_names, stats}
+    """
+    sep = _infer_delimiter(path)
+    logger.info(f"\n{'='*80}")
+    logger.info("CLUSTERING STUDENTS TO FORM DENSE DOMAINS (no ALS)")
+    logger.info(f"{'='*80}")
+    logger.info(f"File: {Path(path).name}")
+    logger.info(f"Separator: {repr(sep)}")
+
+    df = pd.read_csv(path, sep=sep)
+    logger.info(f"Loaded: {len(df):,} rows × {len(df.columns)} columns")
+
+    all_binary = _identify_binary_columns(df)
+    if not all_binary:
+        raise ValueError('No binary response columns found.')
+    logger.info(f"Binary response columns: {len(all_binary)}")
+
+    # Optionally limit number of items
+    if knowledge_items:
+        if randomize:
+            rng = np.random.default_rng(42)
+            sel_idx = rng.choice(len(all_binary), size=min(knowledge_items, len(all_binary)), replace=False)
+            selected_all = [all_binary[i] for i in sel_idx]
+        else:
+            selected_all = all_binary[:knowledge_items]
+    else:
+        selected_all = all_binary
+
+    sub = df[selected_all]
+    mask = sub.notna().astype(int).values
+
+    # Auto-pick K
+    k = _auto_select_k(mask, k_min=2, k_max=max_k)
+    logger.info(f"Auto-selected K={k} clusters (silhouette on availability mask)")
+
+    km = KMeans(n_clusters=k, n_init=10, random_state=42)
+    labels = km.fit_predict(mask)
+
+    clusters = []
+    for cid in range(k):
+        row_idx = np.where(labels == cid)[0]
+        if row_idx.size < min_cluster_rows:
+            logger.info(f"Skip cluster {cid}: too few rows ({row_idx.size} < {min_cluster_rows})")
+            continue
+
+        sub_df = sub.iloc[row_idx]
+        cov = _get_column_coverage(sub_df, selected_all)
+        chosen_cols = cov[cov >= (min_coverage_in_cluster * 100)].index.tolist()
+        if len(chosen_cols) < 3:
+            logger.info(f"Skip cluster {cid}: too few columns after coverage filter ({len(chosen_cols)})")
+            continue
+
+        block = sub_df[chosen_cols]
+        # Drop rows with any NaN to avoid matrix completion
+        block_complete = block.dropna(axis=0, how='any')
+        if block_complete.shape[0] < min_cluster_rows // 2:
+            logger.info(f"Skip cluster {cid}: not enough complete rows after dropna ({block_complete.shape[0]})")
+            continue
+
+        # Ensure binary 0/1
+        block_bin = block_complete.applymap(lambda v: int(v) if str(v).strip().isdigit() else int(float(v)))
+        patterns = [
+            ''.join('1' if x == 1 else '0' for x in row_values)
+            for row_values in block_bin.values.tolist()
+        ]
+
+        density = (block_complete.notna().sum().sum()) / (block_complete.shape[0] * block_complete.shape[1])
+        clusters.append({
+            'id': cid,
+            'row_count': block_complete.shape[0],
+            'col_count': block_complete.shape[1],
+            'response_patterns': patterns,
+            'item_names': chosen_cols,
+            'stats': {
+                'coverage_mean_percent': float(_get_column_coverage(block_complete, chosen_cols).mean()),
+                'density': float(density)
+            }
+        })
+
+    global_meta = {
+        'total_rows': int(df.shape[0]),
+        'total_binary_cols': int(len(all_binary)),
+        'selected_cols': int(len(selected_all)),
+        'formed_clusters': int(len(clusters))
+    }
+    return clusters, global_meta
+
+
+def _pairwise_item_similarity(values_df: pd.DataFrame,
+                              min_pairs: int = 500) -> np.ndarray:
+    """Compute item-item similarity based on correctness correlation where both items observed.
+
+    Returns an (m x m) similarity matrix in [0,1], NaNs treated as 0.
+    """
+    data = values_df
+    m = data.shape[1]
+    sim = np.zeros((m, m), dtype=float)
+    cols = list(data.columns)
+    # Pre-extract columns as arrays
+    arrays = [data[c].values for c in cols]
+    for i in range(m):
+        ai = arrays[i]
+        for j in range(i, m):
+            aj = arrays[j]
+            mask = (~pd.isna(ai)) & (~pd.isna(aj))
+            n = int(np.sum(mask))
+            if n < min_pairs:
+                val = 0.0
+            else:
+                vi = ai[mask].astype(float)
+                vj = aj[mask].astype(float)
+                if np.std(vi) == 0 or np.std(vj) == 0:
+                    val = 0.0
+                else:
+                    corr = float(np.corrcoef(vi, vj)[0, 1])
+                    # Map [-1,1] -> [0,1]
+                    val = max(0.0, min(1.0, 0.5 * (corr + 1.0)))
+            sim[i, j] = sim[j, i] = val
+    return sim
+
+
+def item_cluster_response_patterns(path: str,
+                                   items_min: Optional[int] = None,
+                                   items_max: Optional[int] = None,
+                                   row_coverage_thresh: float = 0.8,
+                                   min_pairs: int = 500,
+                                   max_item_clusters: int = 10,
+                                   knowledge_items: Optional[int] = None,
+                                   randomize: bool = True) -> Tuple[list, dict]:
+    """
+    PARTITION all items into K non-overlapping clusters via item similarity clustering.
+    SVAKO pitanje ide u TAČNO JEDAN klaster. Zbir svih item-a u svim klasterima = ukupan broj item-a.
+    
+    K se bira automatski na osnovu silhouette score analize (higher = better separated clusters).
+    
+    Returns: clusters list with keys: response_patterns_iita, response_patterns_neat, item_names,
+    and stats.
+    """
+    sep = _infer_delimiter(path)
+    logger.info(f"\n{'='*80}")
+    logger.info("ITEM PARTITIONING (svaki item u tačno jedan domain)")
+    logger.info(f"{'='*80}")
+    logger.info(f"File: {Path(path).name}")
+    logger.info(f"Separator: {repr(sep)}")
+
+    df = pd.read_csv(path, sep=sep)
+    all_binary = _identify_binary_columns(df)
+    if not all_binary:
+        raise ValueError('No binary response columns found.')
+    if knowledge_items:
+        selected_all = all_binary[:knowledge_items]
+    else:
+        selected_all = all_binary
+
+    sub = df[selected_all]
+    m = len(selected_all)
+    logger.info(f"Binary items to partition: {m}")
+
+    # Analyze data sparsity to guide K selection range
+    overall_density = sub.notna().sum().sum() / (sub.shape[0] * sub.shape[1])
+    logger.info(f"Overall dataset density: {overall_density:.1%}")
+    
+    # AUTOMATIC MAX K based on number of items and minimum viable cluster size
+    # Philosophy: 
+    # - Min cluster size: 3 items (anything smaller is too trivial for prerequisite structure)
+    # - Max cluster size: adaptive based on density (sparse → larger, dense → smaller)
+    
+    min_items_per_cluster = 3
+    absolute_max_k = max(2, m // min_items_per_cluster)
+    logger.info(f"Absolute maximum K based on {m} items: {absolute_max_k} (min {min_items_per_cluster} items/cluster)")
+    
+    # ADAPTIVE K RANGE - fully data-driven without magic numbers
+    # Logic: Sparse data needs larger clusters to accumulate enough observations
+    #        Dense data can afford smaller, more fine-grained domain separation
+    
+    if overall_density < 0.10:
+        # Very sparse: need LARGE clusters (15-30 items each) to get reasonable density
+        suggested_avg_size = 25
+        k_range_min = max(2, m // 50)  # very conservative lower bound
+        k_range_max = min(absolute_max_k, m // 10)  # larger clusters
+        logger.info(f"Very sparse data ({overall_density:.1%}) → suggesting larger clusters (~{suggested_avg_size} items)")
+    elif overall_density < 0.30:
+        # Moderate: medium clusters (10-20 items each)
+        suggested_avg_size = 15
+        k_range_min = max(2, m // 30)
+        k_range_max = min(absolute_max_k, m // 6)
+        logger.info(f"Moderate density ({overall_density:.1%}) → suggesting medium clusters (~{suggested_avg_size} items)")
+    else:
+        # Dense: can afford small clusters (5-10 items each)
+        suggested_avg_size = 8
+        k_range_min = max(2, m // 20)
+        k_range_max = min(absolute_max_k, m // 4)
+        logger.info(f"Dense data ({overall_density:.1%}) → suggesting smaller clusters (~{suggested_avg_size} items)")
+    
+    logger.info(f"Data-driven K range: [{k_range_min}, {k_range_max}]")
+    
+    # Use data-driven range as primary K selection boundaries
+    k_min = k_range_min
+    k_max = k_range_max
+    
+    # Optional: user can narrow the range with explicit bounds
+    if items_min is not None and items_max is not None:
+        target_avg_size = (items_min + items_max) / 2.0
+        k_from_target = max(2, int(round(m / target_avg_size)))
+        # Expand range around user target
+        k_min = max(2, min(k_min, k_from_target - 3))
+        k_max = min(absolute_max_k, max(k_max, k_from_target + 3))
+        logger.info(f"User-specified size range [{items_min}, {items_max}] → K target ~{k_from_target}")
+    
+    # Override: user can explicitly limit K range via --max-item-clusters
+    if max_item_clusters is not None:
+        k_max = min(absolute_max_k, max_item_clusters)
+        logger.info(f"User override: max K limited to {max_item_clusters}")
+
+    # Compute item-item similarity based on co-observation patterns
+    logger.info(f"Computing pairwise item similarity (min pairs={min_pairs})...")
+    sim_matrix = _pairwise_item_similarity(sub, min_pairs=min_pairs)
+    dist_matrix = 1.0 - sim_matrix
+    np.fill_diagonal(dist_matrix, 0)  # Ensure diagonal is zero for precomputed metric
+    
+    logger.info(f"AUTO K SELECTION: testing K from {k_min} to {k_max} via silhouette score...")
+    
+    best_k = k_min
+    best_score = -1.0
+    scores = {}
+    
+    for k_test in range(k_min, k_max + 1):
+        try:
+            from sklearn.cluster import AgglomerativeClustering
+            clusterer = AgglomerativeClustering(n_clusters=k_test, linkage='average')
+            labels_test = clusterer.fit_predict(dist_matrix)
+            
+            # Silhouette score: measures how compact and separated clusters are
+            # Range [-1, 1]: higher is better
+            score = silhouette_score(dist_matrix, labels_test, metric='precomputed')
+            scores[k_test] = score
+            
+            sizes = [np.sum(labels_test == cid) for cid in range(k_test)]
+            logger.info(f"  K={k_test}: silhouette={score:.3f}, sizes={sorted(sizes)}")
+            
+            if score > best_score:
+                best_score = score
+                best_k = k_test
+        except Exception as e:
+            logger.warning(f"  K={k_test}: failed ({e})")
+            continue
+    
+    k_optimal = best_k
+    logger.info(f"✓ AUTO SELECTED K={k_optimal} (silhouette={scores.get(k_optimal, 0):.3f})")
+    
+    # Final clustering with optimal K
+    clusterer = AgglomerativeClustering(n_clusters=k_optimal, linkage='average')
+    item_labels = clusterer.fit_predict(dist_matrix)
+    
+    # Grupiši items po labelama
+    clusters_items = []
+    for cid in range(k_optimal):
+        idxs = np.where(item_labels == cid)[0]
+        cols = [selected_all[i] for i in idxs]
+        clusters_items.append(cols)
+    
+    # Provera: da li smo particionisali SVE item-e?
+    total_assigned = sum(len(c) for c in clusters_items)
+    logger.info(f"Partition complete: {len(clusters_items)} clusters, {total_assigned}/{m} items assigned")
+    if total_assigned != m:
+        logger.warning(f"GREŠKA: Nije svih {m} item-a particionisano! Assigned={total_assigned}")
+    
+    # Prikaži veličine klastera
+    sizes = [len(c) for c in clusters_items]
+    logger.info(f"Cluster sizes: min={min(sizes)}, max={max(sizes)}, avg={np.mean(sizes):.1f}")
+    logger.info(f"Sizes: {sizes}")
+    logger.info(f"Sizes: {sizes}")
+
+    # Za svaki klaster, formiraj response patterns
+    clusters = []
+    for cid, cols in enumerate(clusters_items):
+        block = sub[cols]
+        # Keep rows that have at least row_coverage_thresh observed within these columns
+        row_obs = block.notna().mean(axis=1)
+        keep = row_obs >= row_coverage_thresh
+        block_kept = block[keep]
+        
+        if block_kept.shape[0] < 50:  # minimum students per cluster
+            logger.warning(f"Cluster {cid} ({len(cols)} items): samo {block_kept.shape[0]} studenata sa >{row_coverage_thresh*100:.0f}% coverage - preskačem")
+            continue
+
+        # IITA patterns: complete rows only
+        block_complete = block_kept.dropna(axis=0, how='any')
+        
+        # Encode for IITA (0/1) and for NEAT (with '-')
+        def encode_binary(df_part: pd.DataFrame) -> list:
+            if df_part.empty:
+                return []
+            bb = df_part.map(lambda v: int(v) if pd.notna(v) and str(v).strip().isdigit() else (int(float(v)) if pd.notna(v) else 0))
+            return [''.join('1' if x == 1 else '0' for x in row) for row in bb.values.tolist()]
+
+        def encode_missing(df_part: pd.DataFrame) -> list:
+            vals = df_part
+            patterns = []
+            for row in vals.values.tolist():
+                out = []
+                for v in row:
+                    if pd.isna(v):
+                        out.append('-')
+                    else:
+                        try:
+                            iv = int(v)
+                        except Exception:
+                            iv = int(float(v))
+                        out.append('1' if iv == 1 else '0')
+                patterns.append(''.join(out))
+            return patterns
+
+        rp_iita = encode_binary(block_complete)
+        rp_neat = encode_missing(block_kept)
+        
+        density_kept = block_kept.notna().sum().sum() / (block_kept.shape[0] * block_kept.shape[1])
+
+        clusters.append({
+            'item_names': cols,
+            'row_count_kept': int(block_kept.shape[0]),
+            'row_count_complete': int(block_complete.shape[0]),
+            'col_count': int(len(cols)),
+            'response_patterns_iita': rp_iita,
+            'response_patterns_neat': rp_neat,
+            'stats': {
+                'row_coverage_thresh': float(row_coverage_thresh),
+                'avg_row_obs_kept_percent': float(row_obs[keep].mean() * 100.0),
+                'density_kept': float(density_kept)
+            }
+        })
+        
+        logger.info(f"  Cluster {cid}: {len(cols)} items, {block_kept.shape[0]} students (kept), {block_complete.shape[0]} complete, density={density_kept:.2%}")
+
+    meta = {
+        'total_rows': int(df.shape[0]),
+        'total_binary_cols': int(len(all_binary)),
+        'selected_cols': int(len(selected_all)),
+        'formed_clusters': int(len(clusters)),
+        'k_optimal': int(k_optimal),
+        'all_items': selected_all,  # ADD: all items for tracking isolated
+        'clusters_items': clusters_items  # ADD: raw cluster partitions
+    }
+    return clusters, meta
+
+
 def _select_columns(coverage: pd.Series,
                    min_coverage: float = 5.0,
                    max_items: Optional[int] = None) -> List[str]:
@@ -323,30 +612,17 @@ def _get_cache_path(data_path: str,
 
 def load_response_patterns(path: str,
                            knowledge_items: Optional[int],
-                           randomize: bool = True,
-                           min_coverage: float = 0.0,
-                           sample_size: Optional[int] = None,
-                           stratify: bool = True,
-                           use_matrix_completion: bool = True,
-                           als_rank: int = 30,
-                           als_iterations: int = 30,
-                           use_cache: bool = True) -> Tuple[List[str], dict]:
+                           randomize: bool = True) -> Tuple[List[str], dict]:
     """
-    Load response patterns sa NAPREDNOM Matrix Completion metodom.
+    Load response patterns with missing values encoded as '-' for NEAT evaluator.
     
-    KLJUČNA PROMENA: Više ne odbacujemo kolone niti redove!
-    Koristimo Matrix Completion (ALS) da rekonstruišemo COMPLETE matricu iz sparse podataka.
+    This is the simple no-ALS mode: sparse patterns with '-' for missing data.
+    NEAT's missing-aware evaluator will handle these appropriately.
     
     Args:
         path: Path to CSV file
         knowledge_items: Number of items (None = use ALL columns)
         randomize: Randomly select items if knowledge_items < total
-        min_coverage: Min coverage za filtriranje (default 0.0 = uzmi sve)
-        sample_size: Sample N students (None = use ALL)
-        stratify: Stratify sampling by T_Grade
-        use_matrix_completion: Ako True, koristi ALS matrix completion za NA vrednosti
-        als_rank: Rank za low-rank factorization (više = preciznije, sporije)
-        als_iterations: Broj ALS iteracija
         
     Returns:
         (response_patterns, metadata)
@@ -354,7 +630,7 @@ def load_response_patterns(path: str,
     
     sep = _infer_delimiter(path)
     logger.info(f'\n{"="*80}')
-    logger.info(f'LOADING DATA WITH MATRIX COMPLETION')
+    logger.info(f'LOADING DATA (missing-aware mode)')
     logger.info(f'{"="*80}')
     logger.info(f'File: {Path(path).name}')
     logger.info(f'Separator: {repr(sep)}')
@@ -369,87 +645,26 @@ def load_response_patterns(path: str,
     if not all_binary:
         raise ValueError('No binary response columns found.')
     
-    # Calculate coverage
-    coverage = _get_column_coverage(df, all_binary)
-    logger.info(f'Coverage stats: min={coverage.min():.1f}%, mean={coverage.mean():.1f}%, max={coverage.max():.1f}%')
+    # Select columns
+    selected_cols = all_binary[:knowledge_items] if knowledge_items else all_binary
+    logger.info(f'Using {len(selected_cols)} columns')
     
-    # Select columns (MOŽE biti SVE ako min_coverage=0)
-    if min_coverage > 0:
-        selected_cols = _select_columns(coverage, min_coverage=min_coverage, max_items=knowledge_items)
-        logger.info(f'Filtered to {len(selected_cols)} columns with {min_coverage}%+ coverage')
-    else:
-        selected_cols = all_binary[:knowledge_items] if knowledge_items else all_binary
-        logger.info(f'Using ALL {len(selected_cols)} columns (no coverage filter)')
-    
-    if not selected_cols:
-        raise ValueError(f'No columns selected. Lower min_coverage or check data.')
-    
-    # Sample students if requested (ali default je None = SVI)
-    if sample_size and sample_size < len(df):
-        logger.info(f'Sampling {sample_size:,} students...')
-        df = _stratified_sample(df, sample_size, stratify_col='T_Grade' if stratify else None)
-    else:
-        logger.info(f'Using ALL {len(df):,} students (no sampling)')
-    
-    # ============================================================
-    # MATRIX COMPLETION - KLJUČNI DEO!
-    # ============================================================
-    
-    if use_matrix_completion:
-        logger.info(f'\n{"="*80}')
-        logger.info(f'MATRIX COMPLETION (ALS)')
-        logger.info(f'{"="*80}')
-        
-        # Konvertuj u numpy array (NaN ostaju NaN)
-        X_sparse = df[selected_cols].values.astype(float)  # NaN ostaje NaN
-        
-        n_students, n_items = X_sparse.shape
-        n_missing = np.sum(np.isnan(X_sparse))
-        sparsity_pct = 100.0 * n_missing / (n_students * n_items)
-        
-        logger.info(f'Sparse matrix: {n_students:,} students × {n_items} items')
-        logger.info(f'Missing values: {n_missing:,} / {n_students * n_items:,} ({sparsity_pct:.1f}% sparse)')
-        
-        # Check cache
-        cache_path = _get_cache_path(path, selected_cols, sample_size, als_rank, als_iterations)
-        
-        if use_cache and cache_path.exists():
-            logger.info(f'\n✓ Loading completed matrix from cache: {cache_path.name}')
-            X_completed = np.load(cache_path)
-            logger.info(f'  Matrix shape: {X_completed.shape}')
-        else:
-            if use_cache:
-                logger.info(f'\nCache not found - running ALS...')
-            
-            # ALS Matrix Completion
-            X_completed = matrix_completion_als(
-                X_sparse, 
-                rank=als_rank,
-                max_iter=als_iterations,
-                reg_lambda=0.1,
-                verbose=True
-            )
-            
-            # Save to cache
-            if use_cache:
-                np.save(cache_path, X_completed)
-                logger.info(f'\n✓ Cached completed matrix to: {cache_path}')
-        
-        # Binarizuj (>= 0.5 = 1, < 0.5 = 0)
-        threshold = 0.5
-        X_binary = (X_completed >= threshold).astype(int)
-        
-        logger.info(f'Binarization: values >= {threshold} → 1, else → 0')
-        logger.info(f'Completed matrix: {np.sum(X_binary == 1):,} ones, {np.sum(X_binary == 0):,} zeros')
-        
-        # Konvertuj u response patterns
-        response_patterns = [''.join(str(val) for val in row) for row in X_binary]
-        
-    else:
-        # FALLBACK: Stari pristup (fillna(0))
-        logger.info('Using simple fillna(0) approach (not recommended for sparse data)')
-        df_filled = df[selected_cols].fillna(0).astype(int)
-        response_patterns = df_filled.apply(lambda row: ''.join(str(val) for val in row), axis=1).tolist()
+    # Encode sparse patterns with '-' for missing
+    logger.info('Encoding missing entries as "-" for NEAT evaluator.')
+    vals = df[selected_cols]
+    def encode_row(row):
+        out = []
+        for v in row:
+            if pd.isna(v):
+                out.append('-')
+            else:
+                try:
+                    iv = int(v)
+                except Exception:
+                    iv = int(float(v))
+                out.append('1' if iv == 1 else '0')
+        return ''.join(out)
+    response_patterns = [encode_row(r) for r in vals.values.tolist()]
     
     # Statistics
     unique_patterns = len(set(response_patterns))
@@ -466,9 +681,7 @@ def load_response_patterns(path: str,
         'selected_columns': selected_cols,
         'num_items': len(selected_cols),
         'valid_patterns': len(response_patterns),
-        'unique_patterns': unique_patterns,
-        'coverage_mean': coverage[selected_cols].mean(),
-        'coverage_min': coverage[selected_cols].min(),
+        'unique_patterns': unique_patterns
     }
 
     return response_patterns, metadata
@@ -533,15 +746,23 @@ def parse_command_line_args() -> argparse.Namespace:
     parser.add_argument('-y', '--greedy', action='store_true',
                         help='[NEAT only] Run algorithm until the first complete, valid learning '
                              'space is created.')
-    parser.add_argument('--use-iita', action='store_true',
-                        help='Use IITA (Inductive Item Tree Analysis) instead of NEAT. '
-                             'IITA is faster and works better on large domains (100+ items).')
-    parser.add_argument('--iita-max-diff', type=float, default=0.05,
-                        help='IITA: Maximum diff threshold for prerequisite relations (default: 0.05).')
-    parser.add_argument('--clear-cache', action='store_true',
-                        help='Clear matrix completion cache before running.')
-    parser.add_argument('--no-cache', action='store_true',
-                        help='Disable matrix completion caching.')
+    parser.add_argument('--cluster', action='store_true',
+                        help='Partition items into non-overlapping domains via similarity clustering.')
+    parser.add_argument('--items-min', type=int, default=None,
+                        help='[items mode] Minimum items per item cluster. Auto-computed if not specified.')
+    parser.add_argument('--items-max', type=int, default=None,
+                        help='[items mode] Maximum items per item cluster. Auto-computed if not specified.')
+    parser.add_argument('--row-coverage-thresh', type=float, default=0.8,
+                        help='[items mode] Minimum per-row observed fraction within item cluster.')
+    parser.add_argument('--min-pairs', type=int, default=500,
+                        help='[items mode] Minimum co-observed pairs to compute item correlation.')
+    parser.add_argument('--max-item-clusters', type=int, default=None,
+                        help='[items mode] Max number of item clusters to attempt. '
+                             'If not set, automatically determines based on data (recommended).')
+    parser.add_argument('--missing-match-reward', type=float, default=0.0,
+                        help='[NEAT only] Reward for matches on observed entries.')
+    parser.add_argument('--missing-mismatch-penalty', type=float, default=1.0,
+                        help='[NEAT only] Penalty for mismatches on observed entries.')
     return parser.parse_args()
 
 
@@ -551,98 +772,49 @@ if __name__ == '__main__':
     
     args = parse_command_line_args()
     
-    # Clear cache if requested
-    if args.clear_cache:
-        cache_dir = Path('output/cache')
-        if cache_dir.exists():
-            import shutil
-            shutil.rmtree(cache_dir)
-            logger.info(f'✓ Cleared cache directory: {cache_dir}')
-    
     config = parse_config_file(config_filename=args.config)
 
     num_items = _parse_knowledge_items(config['LearningSpaceGenome'].get('knowledge_items'))
     
     # ============================================================
-    # MATRIX COMPLETION - KORISTI SVE STUDENTE I SVA PITANJA!
+    # DATA INGESTION: ITEM CLUSTERING vs FULL DATASET
     # ============================================================
-    response_patterns, metadata = load_response_patterns(
-        path=args.data_path,
-        knowledge_items=num_items,          # None = sve kolone, ili broj ako je u config-u
-        randomize=args.randomize_items,
-        min_coverage=0.0,                   # 0% = ne odbacuj kolone zbog coverage-a!
-        sample_size=None,                   # None = SVI studenti!
-        stratify=True,
-        use_matrix_completion=True,         # KLJUČNO: Matrix Completion ALS
-        als_rank=30,                        # Latent dimensionality
-        als_iterations=30,                  # Broj ALS iteracija
-        use_cache=not args.no_cache         # Cache enabled by default
-    )
-
-    logger.info(f'\n=== Data Loading Summary ===')
-    logger.info(f'Items selected: {metadata["num_items"]}')
-    logger.info(f'Valid students: {metadata["valid_patterns"]:,}')
-    logger.info(f'Unique patterns: {metadata["unique_patterns"]:,}')
-    logger.info(f'Mean coverage: {metadata["coverage_mean"]:.1f}%')
-
-    actual_num_items = metadata['num_items']
-    
-    # ============================================================
-    # CHOOSE ALGORITHM: IITA or NEAT
-    # ============================================================
-    
-    if args.use_iita:
-        # Warn about unused NEAT-only arguments
-        neat_only_args = []
-        if args.parallel:
-            neat_only_args.append('--parallel')
-        if args.plot:
-            neat_only_args.append('--plot')
-        if args.greedy:
-            neat_only_args.append('--greedy')
-        if args.patience != EARLY_STOPPING_PATIENCE:
-            neat_only_args.append('--patience')
-        if args.generations != DEFAULT_GENERATIONS:
-            neat_only_args.append('--generations')
-        
-        if neat_only_args:
-            logger.warning(f"⚠️  NEAT-only arguments will be ignored with --use-iita: {', '.join(neat_only_args)}")
-        
-        # ============================================================
-        # IITA (INDUCTIVE ITEM TREE ANALYSIS)
-        # ============================================================
-        logger.info(f'\n{"="*80}')
-        logger.info('USING IITA (Inductive Item Tree Analysis)')
-        logger.info(f'{"="*80}')
-        logger.info('IITA is designed for large domains and finds prerequisite structures.')
-        logger.info(f'Items: {actual_num_items}')
-        logger.info(f'Max diff threshold: {args.iita_max_diff}')
-        logger.info(f'{"="*80}\n')
-        
-        # Run IITA analysis
-        png_path = None
-        if args.png:
-            png_path = args.png if '/' in args.png or '\\' in args.png else output_utils.get_visualization_path(args.png)
-        
-        iita_analyzer = run_iita_analysis(
-            response_patterns=response_patterns,
-            item_names=metadata['selected_columns'],
-            min_support=0.01,
-            max_diff=args.iita_max_diff,
-            output_json=None,  # Will save later
-            png_output=png_path,
-            verbose=not args.silent
+    clustered = None
+    if args.cluster:
+        item_clusters, global_meta = item_cluster_response_patterns(
+            path=args.data_path,
+            items_min=args.items_min,
+            items_max=args.items_max,
+            row_coverage_thresh=args.row_coverage_thresh,
+            min_pairs=args.min_pairs,
+            max_item_clusters=args.max_item_clusters,
+            knowledge_items=num_items,
+            randomize=args.randomize_items
         )
-        
-        # Save results
-        if args.json:
-            json_path = args.json if '/' in args.json or '\\' in args.json else output_utils.get_data_path(args.json)
-            iita_analyzer.to_json(json_path)
-            print(f"\nIITA prerequisite structure saved to '{json_path}'")
-        
-        logger.info("\n✓ IITA analysis complete!")
-        
+        if not item_clusters:
+            raise SystemExit("No item clusters formed. Try lowering --row-coverage-thresh.")
+        logger.info(f"Formed {len(item_clusters)} item clusters; proceeding per-cluster.")
+        clustered = item_clusters
+        actual_num_items = clustered[0]['col_count']
     else:
+        response_patterns, metadata = load_response_patterns(
+            path=args.data_path,
+            knowledge_items=num_items,
+            randomize=args.randomize_items
+        )
+
+        logger.info(f'\n=== Data Loading Summary ===')
+        logger.info(f'Items selected: {metadata["num_items"]}')
+        logger.info(f'Valid students: {metadata["valid_patterns"]:,}')
+        logger.info(f'Unique patterns: {metadata["unique_patterns"]:,}')
+        logger.info(f'Mean coverage: {metadata["coverage_mean"]:.1f}%')
+        actual_num_items = metadata['num_items']
+    
+    # ============================================================
+    # RUN NEAT ALGORITHM
+    # ============================================================
+    
+    if not args.cluster:
         # ============================================================
         # NEAT (ORIGINAL ALGORITHM)
         # ============================================================
@@ -687,8 +859,11 @@ if __name__ == '__main__':
                               early_stopping_patience=args.patience,
                               verbose=not args.silent,
                               plot_best=args.plot,
-                              parallel=args.parallel,
-                              is_greedy=args.greedy)
+                      parallel=args.parallel,
+                      is_greedy=args.greedy,
+                      mismatch_penalty=args.missing_mismatch_penalty,
+                      match_reward=args.missing_match_reward,
+                      item_names=metadata.get('selected_columns', None))
 
         if not optimal_ls.is_valid():
             print('\n[WARNING] Learning space is not valid.')
@@ -705,3 +880,156 @@ if __name__ == '__main__':
             png_path = args.png if '/' in args.png or '\\' in args.png else output_utils.get_visualization_path(args.png)
             save_learning_space_graph(learning_space=optimal_ls, outfile=png_path)
             print(f"The best learning space graph PNG saved to '{png_path}'")
+
+    else:
+        # ============================================================
+        # CLUSTERED FLOW (PER-CLUSTER IITA or NEAT) - students or items
+        # ============================================================
+        results_index = []
+        for cluster in clustered:
+            # Normalize cluster structure for both modes
+            if 'id' in cluster:
+                cid = cluster['id']
+            else:
+                # for item clusters, synthesize ID by index
+                cid = clustered.index(cluster)
+
+            items = cluster['item_names']
+            if 'response_patterns' in cluster:
+                # students-mode cluster
+                rp_iita = cluster['response_patterns']  # already complete
+                rp_neat = cluster['response_patterns']  # same, no missing
+                row_info = f"rows={cluster['row_count']}"
+            else:
+                rp_iita = cluster['response_patterns_iita']
+                rp_neat = cluster['response_patterns_neat']
+                row_info = f"rows_kept={cluster['row_count_kept']}, rows_complete={cluster['row_count_complete']}"
+
+            logger.info(f"\n--- Cluster {cid}: {row_info} cols={cluster['col_count']}")
+
+            # NEAT per cluster - build temp config with correct items
+            tmp_cfg = _materialize_config(config, base_path=args.config, knowledge_items=len(items))
+
+            generations = None if args.greedy else args.generations
+            optimal_ls = run_neat(generations=generations,
+                                      config_filename=tmp_cfg,
+                                      responses=rp_neat,
+                                      early_stopping_patience=args.patience,
+                                      verbose=not args.silent,
+                                      plot_best=False,
+                                      parallel=args.parallel,
+                                      is_greedy=args.greedy,
+                                      mismatch_penalty=args.missing_mismatch_penalty,
+                                      match_reward=args.missing_match_reward,
+                                      item_names=items)
+
+            png_path = None
+            if args.png:
+                base = Path(args.png)
+                name = base.stem + f"_cluster{cid}" + base.suffix
+                # Use temp file for intermediate clusters (final merged result goes to args.png)
+                import tempfile
+                png_path = tempfile.mktemp(suffix=f'_cluster{cid}.png')
+                save_learning_space_graph(learning_space=optimal_ls, outfile=png_path)
+
+            json_path = None
+            if args.json:
+                base = Path(args.json)
+                name = base.stem + f"_cluster{cid}" + base.suffix
+                # Use temp file for intermediate clusters (final merged result goes to args.json)
+                import tempfile
+                json_path = tempfile.mktemp(suffix=f'_cluster{cid}.json')
+                with open(json_path, 'w') as fp:
+                    fp.write(optimal_ls.to_json())
+
+            results_index.append({'cluster': cid, 'algo': 'neat', 'json': json_path, 'png': png_path, 'stats': cluster['stats']})
+
+        # Save simple index file (use /tmp for Docker read-only volumes)
+        try:
+            index_path = output_utils.get_data_path('cluster_results_index.json')
+            with open(index_path, 'w', encoding='utf-8') as f:
+                import json as _json
+                _json.dump({'clusters': results_index}, f, ensure_ascii=False, indent=2)
+            logger.info(f"\n✓ Clustered analysis complete. Index saved to {index_path}")
+        except (OSError, PermissionError):
+            # Fallback to /tmp if output directory is read-only
+            import tempfile
+            import json as _json
+            index_path = tempfile.mktemp(suffix='_cluster_results_index.json')
+            with open(index_path, 'w', encoding='utf-8') as f:
+                _json.dump({'clusters': results_index}, f, ensure_ascii=False, indent=2)
+            logger.info(f"\n✓ Clustered analysis complete. Index saved to {index_path}")
+
+        # Create structured multi-level knowledge space output
+        if args.json and results_index:
+            import json as _json
+            
+            # Build proper hierarchical structure
+            structured_output = {
+                "metadata": {
+                    "total_items": len(global_meta['all_items']),
+                    "num_clusters": len(global_meta['clusters_items']),
+                    "algorithm": "NEAT",
+                    "clustering_method": "hierarchical_agglomerative",
+                    "k_optimal": global_meta['k_optimal']
+                },
+                "clusters": [],
+                "isolated_items": [],
+                "merged_learning_space": {}
+            }
+            
+            # Collect all items that appear in processed clusters
+            items_in_processed = set()
+            
+            # Process each successfully analyzed cluster
+            for item in results_index:
+                cluster_info = {
+                    "cluster_id": item['cluster'],
+                    "items": clustered[item['cluster']]['item_names'],
+                    "num_items": len(clustered[item['cluster']]['item_names']),
+                    "num_students": clustered[item['cluster']]['row_count_kept'],
+                    "num_complete": clustered[item['cluster']]['row_count_complete'],
+                    "density": clustered[item['cluster']]['stats']['density_kept'],
+                    "learning_space": None
+                }
+                
+                items_in_processed.update(clustered[item['cluster']]['item_names'])
+                
+                # Load cluster's learning space
+                if item['json'] and os.path.exists(item['json']):
+                    with open(item['json'], 'r') as f:
+                        cluster_ls = _json.load(f)
+                        cluster_info['learning_space'] = cluster_ls
+                        cluster_info['num_states'] = len(cluster_ls)
+                        
+                        # Add to merged space
+                        structured_output['merged_learning_space'].update(cluster_ls)
+                
+                structured_output['clusters'].append(cluster_info)
+            
+            # Find isolated items: items in original clusters but NOT in processed results
+            # (due to insufficient data / skipped clusters)
+            all_items_set = set(global_meta['all_items'])
+            isolated = all_items_set - items_in_processed
+            
+            # Add singleton states for isolated items
+            for item in sorted(isolated):
+                singleton_state = f"{{{item}}}"
+                structured_output['isolated_items'].append(item)
+                # Add to merged space: {} -> {item}
+                if "{}" not in structured_output['merged_learning_space']:
+                    structured_output['merged_learning_space']["{}"] = []
+                if singleton_state not in structured_output['merged_learning_space']["{}"] :
+                    structured_output['merged_learning_space']["{}"].append(singleton_state)
+            
+            structured_output['metadata']['items_in_clusters'] = len(items_in_processed)
+            structured_output['metadata']['isolated_items'] = len(isolated)
+            
+            with open(args.json, 'w') as f:
+                _json.dump(structured_output, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"\n✓ Structured knowledge space saved to {args.json}")
+            logger.info(f"  Total items: {len(all_items_set)}")
+            logger.info(f"  Items in processed clusters: {len(items_in_processed)}")
+            logger.info(f"  Isolated items (no data): {len(isolated)}")
+            logger.info(f"  Total states: {len(structured_output['merged_learning_space'])}")

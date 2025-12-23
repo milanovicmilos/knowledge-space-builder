@@ -45,12 +45,12 @@ export const getTasks = async () => {
 
 // Result endpoints
 export const getResult = async (taskId: number) => {
-  const { data } = await api.get(`/results/results/${taskId}`);
+  const { data } = await api.get(`/results/${taskId}`);
   return data;
 };
 
 export const downloadResult = async (taskId: number) => {
-  const response = await api.get(`/results/results/${taskId}/download`, {
+  const response = await api.get(`/results/${taskId}/download`, {
     responseType: 'blob',
   });
   return response.data;
@@ -65,7 +65,7 @@ export const listResults = async (params?: {
   date_from?: string; // ISO
   date_to?: string;   // ISO
 }) => {
-  const { data } = await api.get('/results/results', { params });
+  const { data } = await api.get('/results', { params });
   return data as { total: number; items: Array<{
     result_id: number; task_id: number; status: string; algorithm: string;
     created_at: string; completed_at?: string | null; upload_id: number;
@@ -75,5 +75,5 @@ export const listResults = async (params?: {
 };
 
 export const deleteResult = async (taskId: number) => {
-  await api.delete(`/results/results/${taskId}`);
+  await api.delete(`/results/${taskId}`);
 };

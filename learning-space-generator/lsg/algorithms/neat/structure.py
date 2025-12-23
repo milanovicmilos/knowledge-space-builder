@@ -12,6 +12,8 @@ _ASCII_LETTERS_TO_INDEX = {
 
 class KnowledgeState:
     EMPTY_STATE_SYMBOL = '∅'
+    # Store item names mapping globally (set by LearningSpaceGenome)
+    _item_names_map = None
 
     def __init__(self, iterable: Iterable):
         self._bitarray = bitarray(iterable)
@@ -55,7 +57,15 @@ class KnowledgeState:
         return '{' + ', '.join(self._to_letters()) + '}'
 
     def _to_letters(self) -> str:
-        # Za velike datasets (>52 itema), koristi brojeve umesto slova
+        # Use original item names if available
+        if KnowledgeState._item_names_map is not None:
+            return [
+                KnowledgeState._item_names_map[i]
+                for i, bit in enumerate(self.to_bitstring())
+                if bit == '1'
+            ]
+        
+        # Fallback to generic letter labels
         max_letters = len(string.ascii_letters)  # 52
         return [
             string.ascii_letters[i] if i < max_letters else f'item{i}'

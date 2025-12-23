@@ -19,31 +19,55 @@ class Evaluator(ABC):
 
     def __init__(self,
                  response_patterns: List[str],
-                 node_size_penalty: float = 500.0,
+                 node_size_penalty: float = 50.0,  # REDUCED from 500 to allow larger structures
                  valid_learning_space_weight: float = 256.0,
                  use_vectorized: bool = True,
-                 max_learning_space_size: int = 300):
+                 max_learning_space_size: int = 300,
+                 mismatch_penalty: float = 1.0,
+                 match_reward: float = 0.0,
+                 missing_policy: str = "ignore"):
         self.response_patterns = response_patterns
         self.node_size_penalty = node_size_penalty
         self.valid_learning_space_weight = valid_learning_space_weight
         self.use_vectorized = use_vectorized
         self.max_learning_space_size = max_learning_space_size
+        self.mismatch_penalty = float(mismatch_penalty)
+        self.match_reward = float(match_reward)
+        self.missing_policy = missing_policy
         
         # Konvertuj pattern stringove u numpy array za brže operacije
+        # Parse response patterns into value and mask arrays to support missing-aware distance.
+        # Allowed symbols per position: '0', '1', and optional '-' (missing).
         if use_vectorized:
             try:
-                self.pattern_array = np.array([
-                    np.fromiter((int(c) for c in pattern), dtype=np.uint8)
-                    for pattern in response_patterns
-                ], dtype=np.uint8)
-                logger.info(f"Vektorisano: pattern_array oblik {self.pattern_array.shape}, "
-                           f"memory {self.pattern_array.nbytes / 1024**2:.2f}MB")
+                values = []
+                masks = []
+                for pattern in response_patterns:
+                    v_row = []
+                    m_row = []
+                    for ch in pattern:
+                        if ch == '0' or ch == '1':
+                            v_row.append(1 if ch == '1' else 0)
+                            m_row.append(1)
+                        else:
+                            # Missing symbol (e.g. '-') or any other non-binary
+                            v_row.append(0)
+                            m_row.append(0)
+                    values.append(v_row)
+                    masks.append(m_row)
+                self.pattern_array = np.array(values, dtype=np.uint8)
+                self.pattern_mask = np.array(masks, dtype=np.uint8)
+                logger.info(
+                    f"Vektorisano: pattern_array {self.pattern_array.shape}, mask {self.pattern_mask.shape}, "
+                    f"mem {(self.pattern_array.nbytes + self.pattern_mask.nbytes) / 1024**2:.2f}MB")
             except Exception as e:
                 logger.warning(f"Vektorisacija nije moguća: {e}. Koristim originalnu verziju.")
                 self.use_vectorized = False
                 self.pattern_array = None
+                self.pattern_mask = None
         else:
             self.pattern_array = None
+            self.pattern_mask = None
 
     @abstractmethod
     def evaluate(self,
@@ -91,7 +115,10 @@ class ParallelEvaluator(Evaluator):
             self._pool.apply_async(get_discrepancy, (self.response_patterns,
                                                      genome.knowledge_states(),
                                                      self.CACHE,
-                                                     self.pattern_array))
+                                                     self.pattern_array,
+                                                     self.pattern_mask,
+                                                     self.mismatch_penalty,
+                                                     self.match_reward))
             for _, genome in genomes
         ]
 
@@ -113,14 +140,20 @@ class SerialEvaluator(Evaluator):
             discrepancy = get_discrepancy(response_patterns=self.response_patterns,
                                           knowledge_states=genome.knowledge_states(),
                                           cache=self._cache,
-                                          pattern_array=self.pattern_array)
+                                          pattern_array=self.pattern_array,
+                                          pattern_mask=self.pattern_mask,
+                                          mismatch_penalty=self.mismatch_penalty,
+                                          match_reward=self.match_reward)
             self._set_fitness(genome, discrepancy)
 
 
 def get_discrepancy(response_patterns: List[str],
                     knowledge_states: List[KnowledgeState],
                     cache: dict = None,
-                    pattern_array: np.ndarray = None) -> float:
+                    pattern_array: np.ndarray = None,
+                    pattern_mask: np.ndarray = None,
+                    mismatch_penalty: float = 1.0,
+                    match_reward: float = 0.0) -> float:
     """
     Vrati diskrepanciju iz cache-a ili izračunaj.
     
@@ -128,7 +161,8 @@ def get_discrepancy(response_patterns: List[str],
     Ako je pattern_array dostupan, koristi vektorisanu verziju.
     """
     if cache is None:
-        return compute_discrepancy(response_patterns, knowledge_states, pattern_array)
+        return compute_discrepancy(response_patterns, knowledge_states, pattern_array, pattern_mask,
+                                   mismatch_penalty, match_reward)
 
     # Kreiraj ključ od knowledge states
     state_str = ''.join(s.to_bitstring() for s in sorted(
@@ -138,7 +172,8 @@ def get_discrepancy(response_patterns: List[str],
     cache_key = hashlib.md5(state_str.encode()).hexdigest()
     
     if cache_key not in cache:
-        cache[cache_key] = compute_discrepancy(response_patterns, knowledge_states, pattern_array)
+        cache[cache_key] = compute_discrepancy(response_patterns, knowledge_states, pattern_array, pattern_mask,
+                                               mismatch_penalty, match_reward)
 
     return cache[cache_key]
 
@@ -151,28 +186,60 @@ def transform_key(knowledge_states: List[KnowledgeState]) -> Tuple:
 
 def compute_discrepancy(response_patterns: List[str],
                         knowledge_states: List[KnowledgeState],
-                        pattern_array: np.ndarray = None) -> float:
+                        pattern_array: np.ndarray = None,
+                        pattern_mask: np.ndarray = None,
+                        mismatch_penalty: float = 1.0,
+                        match_reward: float = 0.0) -> float:
     """
     Izračunaj diskrepanciju između learning space-a i observed response pattern-a.
     
     Ako je pattern_array dostupan, koristi vektorisanu verziju (50-100x brža).
     """
     if pattern_array is not None and len(knowledge_states) > 0:
-        return _compute_discrepancy_vectorized(pattern_array, knowledge_states)
+        return _compute_discrepancy_vectorized(pattern_array, knowledge_states,
+                                               pattern_mask=pattern_mask,
+                                               mismatch_penalty=mismatch_penalty,
+                                               match_reward=match_reward)
     
     # Fallback na originalnu verziju
-    partition_dict = partition(response_patterns, knowledge_states)
-    discrepancy = 0
-    for response in response_patterns:
-        for state in knowledge_states:
-            partition_value = get_partition_value(response, state, partition_dict)
-            dissimilarity = state.distance(KnowledgeState(response))
-            discrepancy += partition_value * dissimilarity
-    return discrepancy
+    # Non-vectorized, missing-aware computation.
+    # Build numpy arrays lazily from strings
+    values = []
+    masks = []
+    for pattern in response_patterns:
+        v_row = []
+        m_row = []
+        for ch in pattern:
+            if ch in ('0', '1'):
+                v_row.append(1 if ch == '1' else 0)
+                m_row.append(1)
+            else:
+                v_row.append(0)
+                m_row.append(0)
+        values.append(v_row)
+        masks.append(m_row)
+    values = np.array(values, dtype=np.uint8)
+    masks = np.array(masks, dtype=np.uint8)
+
+    total = 0.0
+    # Precompute state arrays
+    state_array = np.array([[int(c) for c in s.to_bitstring()] for s in knowledge_states], dtype=np.uint8)
+    for r in range(values.shape[0]):
+        v = values[r]
+        m = masks[r]
+        # distances for this response to all states
+        mismatches = np.sum(((state_array != v) & (m == 1)), axis=1)
+        matches = np.sum(((state_array == v) & (m == 1)), axis=1)
+        loss = mismatches * mismatch_penalty - matches * match_reward
+        total += float(np.min(loss))
+    return total
 
 
 def _compute_discrepancy_vectorized(pattern_array: np.ndarray,
-                                   knowledge_states: List[KnowledgeState]) -> float:
+                                   knowledge_states: List[KnowledgeState],
+                                   pattern_mask: np.ndarray = None,
+                                   mismatch_penalty: float = 1.0,
+                                   match_reward: float = 0.0) -> float:
     """
     Vektorisana verzija diskrepancije - procesira u batch-ovima da izbegne memory error.
     
@@ -205,17 +272,21 @@ def _compute_discrepancy_vectorized(pattern_array: np.ndarray,
     for i in range(0, n_patterns, batch_size):
         batch_end = min(i + batch_size, n_patterns)
         batch_patterns = pattern_array[i:batch_end]
-        
-        # Hamming distances za ovaj batch
-        # shape: (batch_size, n_states)
-        distances = np.sum(
-            batch_patterns[:, np.newaxis, :] != state_array[np.newaxis, :, :],
-            axis=2
-        )
-        
-        # Za svaki pattern u batch-u, pronađi minimalni state
-        min_distances = np.min(distances, axis=1)
-        total_discrepancy += np.sum(min_distances)
+        if pattern_mask is not None:
+            mask_batch = pattern_mask[i:batch_end]
+        else:
+            mask_batch = np.ones_like(batch_patterns, dtype=np.uint8)
+
+        # Compute mismatches and matches only on observed positions
+        # Shapes: (batch, states, items)
+        neq = (batch_patterns[:, np.newaxis, :] != state_array[np.newaxis, :, :]) & (mask_batch[:, np.newaxis, :] == 1)
+        eq = (batch_patterns[:, np.newaxis, :] == state_array[np.newaxis, :, :]) & (mask_batch[:, np.newaxis, :] == 1)
+
+        mismatches = np.sum(neq, axis=2)
+        matches = np.sum(eq, axis=2)
+        loss = mismatches * mismatch_penalty - matches * match_reward
+        min_loss = np.min(loss, axis=1)
+        total_discrepancy += float(np.sum(min_loss))
     
     return float(total_discrepancy)
 

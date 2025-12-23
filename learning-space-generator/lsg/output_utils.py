@@ -13,8 +13,13 @@ MODELS_DIR = OUTPUT_DIR / "models"
 
 def ensure_output_dirs() -> None:
     """Create output directory structure if it doesn't exist."""
-    for directory in [OUTPUT_DIR, VISUALIZATIONS_DIR, DATA_DIR, MODELS_DIR]:
-        directory.mkdir(parents=True, exist_ok=True)
+    # Skip if OUTPUT_DIR is not writable (e.g., read-only Docker volume)
+    try:
+        for directory in [OUTPUT_DIR, VISUALIZATIONS_DIR, DATA_DIR, MODELS_DIR]:
+            directory.mkdir(parents=True, exist_ok=True)
+    except (OSError, PermissionError):
+        # Ignore errors if directory creation fails (read-only filesystem)
+        pass
 
 
 def get_visualization_path(filename: str) -> str:

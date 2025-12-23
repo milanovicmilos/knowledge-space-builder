@@ -61,6 +61,7 @@ class LearningSpaceGenome:
         self.key = key
         self.nodes = {}
         self.fitness = None
+        self.item_names = None  # Will be set by run_neat()
 
     def configure_new(self, config: LearningSpaceGenomeConfig) -> None:
         """Configure new learning space genome.
@@ -218,11 +219,19 @@ class LearningSpaceGenome:
         return pydot.graph_from_edges(self._get_edges(), directed=True)
 
     def to_json(self) -> str:
+        # Set item names map if available
+        if self.item_names is not None:
+            KnowledgeState._item_names_map = self.item_names
+        
         json_dict = defaultdict(list)
         for source, destination in self._get_edges():
             if source == KnowledgeState.EMPTY_STATE_SYMBOL:
                 source = '{}'
             json_dict[source].append(destination)
+        
+        # Clear map after use
+        KnowledgeState._item_names_map = None
+        
         return json.dumps(json_dict, indent=2)
 
     def to_binary_matrix(self) -> np.ndarray:

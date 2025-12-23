@@ -10,7 +10,7 @@ from app.schemas.result import ResultResponse, ResultsListResponse
 from datetime import datetime
 
 router = APIRouter()
-@router.get("/results", response_model=ResultsListResponse)
+@router.get("", response_model=ResultsListResponse)
 async def list_results(
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -61,19 +61,46 @@ async def list_results(
 
 
 
-@router.get("/results/{task_id}", response_model=ResultResponse)
+@router.get("/{task_id}", response_model=ResultResponse)
 async def get_result(
     task_id: int,
     db: Session = Depends(get_db)
 ):
-    """Get result by task ID"""
+    """Get result by task ID with learning space data"""
     result = db.query(Result).filter(Result.task_id == task_id).first()
     if not result:
         raise HTTPException(404, "Result not found")
-    return result
+    
+    # Load learning space from storage
+    try:
+        import json
+        file_path = storage_service.get_file_path(result.graph_storage_key)
+        with open(file_path, 'r') as f:
+            learning_space_data = json.load(f)
+    except Exception:
+        learning_space_data = None
+    
+    # Add learning space to result (not in DB model, but in API response)
+    result_dict = {
+        "id": result.id,
+        "task_id": result.task_id,
+        "graph_storage_key": result.graph_storage_key,
+        "num_states": result.num_states,
+        "num_edges": result.num_edges,
+        "num_relations": result.num_relations,
+        "discrepancy": result.discrepancy,
+        "is_valid": result.is_valid,
+        "algorithm": result.algorithm,
+        "final_generation": result.final_generation,
+        "execution_time_seconds": result.execution_time_seconds,
+        "result_metadata": result.result_metadata,
+        "created_at": result.created_at,
+        "learning_space": learning_space_data
+    }
+    return result_dict
 
 
-@router.get("/results/{task_id}/download")
+@router.get("/{task_id}/download")
 async def download_result(
     task_id: int,
     format: str = 'json',
