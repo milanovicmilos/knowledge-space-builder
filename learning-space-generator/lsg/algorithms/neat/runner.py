@@ -28,7 +28,11 @@ def run_neat(generations: int,
              verbose: bool = False,
              plot_best: bool = False,
              parallel: bool = False,
-             is_greedy: bool = False) -> LearningSpaceGenome:
+             is_greedy: bool = False,
+             mismatch_penalty: float = 1.0,
+             match_reward: float = 0.0,
+             missing_policy: str = "ignore",
+             item_names: List[str] = None) -> LearningSpaceGenome:
     """
     Run NEAT algorithm to generate learning space.
     
@@ -75,9 +79,17 @@ def run_neat(generations: int,
         population.add_reporter(plot_reporter)
 
     if parallel:
-        evaluator = ParallelEvaluator(responses)
+        evaluator = ParallelEvaluator(
+            responses,
+            mismatch_penalty=mismatch_penalty,
+            match_reward=match_reward,
+        )
     else:
-        evaluator = SerialEvaluator(responses)
+        evaluator = SerialEvaluator(
+            responses,
+            mismatch_penalty=mismatch_penalty,
+            match_reward=match_reward,
+        )
 
     try:
         optimal_ls = population.run(evaluator.evaluate, generations)
@@ -103,4 +115,8 @@ def run_neat(generations: int,
         print('\nTermination threshold reached. '
               'Found genome with {} discrepancy'.format(optimal_ls.discrepancy()))
 
+    # Store item names in genome for JSON export
+    if item_names is not None:
+        optimal_ls.item_names = item_names
+    
     return optimal_ls

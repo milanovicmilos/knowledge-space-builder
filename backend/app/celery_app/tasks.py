@@ -20,7 +20,7 @@ from app.services.storage import storage_service
 
 
 def parse_progress_line(line: str) -> Optional[Dict[str, Any]]:
-    """Parse progress info from NEAT/IITA stdout"""
+    """Parse progress info from NEAT algorithm stdout"""
     progress = {}
     
     # NEAT progress: "Generation 42/100: Best fitness = 0.85, Current = 0.78"
@@ -38,28 +38,26 @@ def parse_progress_line(line: str) -> Optional[Dict[str, Any]]:
         progress['stage'] = 'evolution'
         return progress
     
-    # IITA progress: "Processing item 45/120..."
-    iita_match = re.search(r'(?:Processing|Analyzing).*?(\d+)/(\d+)', line, re.IGNORECASE)
-    if iita_match:
-        current = int(iita_match.group(1))
-        total = int(iita_match.group(2))
-        progress['current_item'] = current
-        progress['total_items'] = total
-        progress['progress_percent'] = int((current / total) * 100)
-        progress['stage'] = 'analysis'
+    # Item clustering progress: "K=3: silhouette=0.134" or "Analyzing K=3"
+    cluster_match = re.search(r'K=(\d+).*silhouette.*?=\s*([\d.-]+)', line, re.IGNORECASE)
+    if cluster_match:
+        k = int(cluster_match.group(1))
+        silhouette = float(cluster_match.group(2))
+        progress['cluster_k'] = k
+        progress['silhouette_score'] = silhouette
+        progress['progress_percent'] = 10
+        progress['stage'] = 'clustering'
         return progress
     
-    # Matrix completion: "Iteration 15/30: RMSE = 0.0022"
-    matrix_match = re.search(r'Iteration\s+(\d+)/(\d+).*RMSE\s*=\s*([\d.]+)', line, re.IGNORECASE)
-    if matrix_match:
-        current_iter = int(matrix_match.group(1))
-        max_iter = int(matrix_match.group(2))
-        rmse = float(matrix_match.group(3))
-        progress['iteration'] = current_iter
-        progress['max_iteration'] = max_iter
-        progress['progress_percent'] = int((current_iter / max_iter) * 30)  # Matrix is ~30% of total
-        progress['rmse'] = rmse
-        progress['stage'] = 'matrix_completion'
+    # Cluster processing: "--- Cluster 0: rows_kept=113"
+    cluster_proc_match = re.search(r'Cluster\s+(\d+).*rows_kept=(\d+)', line, re.IGNORECASE)
+    if cluster_proc_match:
+        cluster_id = int(cluster_proc_match.group(1))
+        rows_kept = int(cluster_proc_match.group(2))
+        progress['current_cluster'] = cluster_id
+        progress['rows_kept'] = rows_kept
+        progress['progress_percent'] = 20 + (cluster_id * 10)  # Increment per cluster
+        progress['stage'] = 'processing_cluster'
         return progress
     
     return None
@@ -67,7 +65,7 @@ def parse_progress_line(line: str) -> Optional[Dict[str, Any]]:
 
 @celery_app.task(bind=True)
 def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
-    """Execute NEAT or IITA algorithm with real-time progress tracking"""
+    """Execute NEAT algorithm with item clustering and real-time progress tracking"""
     db = SessionLocal()
     
     try:
@@ -91,33 +89,44 @@ def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
         
         cmd = [sys.executable, '-m', 'lsg.run', '--data-path', csv_path]
         
-        # Algorithm selection
-        if parameters.get('use_iita', False):
-            cmd.extend(['--use-iita', '--iita-max-diff', str(parameters.get('iita_max_diff', 0.08))])
-            algorithm = 'iita'
+        # Item clustering (NEW: always enabled, no more --use-iita)
+        if parameters.get('cluster', True):
+            cmd.append('--cluster')
+            
+            # Row coverage threshold
+            if 'row_coverage_thresh' in parameters:
+                cmd.extend(['--row-coverage-thresh', str(parameters['row_coverage_thresh'])])
+            
+            # Minimum pairs per item
+            if 'min_pairs' in parameters:
+                cmd.extend(['--min-pairs', str(parameters['min_pairs'])])
+            
+            # Max item clusters
+            if 'max_item_clusters' in parameters and parameters['max_item_clusters'] is not None:
+                cmd.extend(['--max-item-clusters', str(parameters['max_item_clusters'])])
+        
+        # NEAT specific options
+        if parameters.get('greedy', False):
+            cmd.append('--greedy')
         else:
-            algorithm = 'neat'
-            # NEAT specific options
-            if parameters.get('greedy', False):
-                cmd.append('--greedy')
-            else:
-                cmd.extend(['--generations', str(parameters.get('generations', 50))])
-                cmd.extend(['--patience', str(parameters.get('patience', 20))])
-            
-            if parameters.get('parallel', True):
-                cmd.append('--parallel')
-            
-            if parameters.get('plot', False):
-                cmd.append('--plot')
+            cmd.extend(['--generations', str(parameters.get('generations', 50))])
+            cmd.extend(['--patience', str(parameters.get('patience', 20))])
+        
+        if parameters.get('parallel', True):
+            cmd.append('--parallel')
+        
+        if parameters.get('plot', False):
+            cmd.append('--plot')
+        
+        # Missing value handling
+        if 'missing_match_reward' in parameters:
+            cmd.extend(['--missing-match-reward', str(parameters['missing_match_reward'])])
+        if 'missing_mismatch_penalty' in parameters:
+            cmd.extend(['--missing-mismatch-penalty', str(parameters['missing_mismatch_penalty'])])
         
         # Data options
         if parameters.get('randomize_items', False):
             cmd.append('--randomize-items')
-        
-        # Cache options
-        if parameters.get('clear_cache', False):
-            cmd.append('--clear-cache')
-        cmd.append('--no-cache')  # Always use --no-cache for read-only volume
         
         # Output options
         cmd.extend(['--json', output_json])
@@ -162,7 +171,7 @@ def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
         
         if process.returncode != 0:
             full_output = ''.join(output_lines)
-            raise Exception(f"{algorithm.upper()} failed with exit code {process.returncode}:\n{full_output}")
+            raise Exception(f"NEAT algorithm failed with exit code {process.returncode}:\n{full_output}")
         
         # Read result JSON
         with open(output_json, 'r') as f:
@@ -190,41 +199,30 @@ def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
             )
             os.unlink(png_output)
         
-        # Parse algorithm-specific metadata
-        if algorithm == 'iita':
-            num_relations = result_data.get('metadata', {}).get('total_relations', 0)
-            num_items = result_data.get('metadata', {}).get('n_items', 0)
-            
-            db_result = Result(
-                task_id=task_id,
-                graph_storage_key=json_storage_key,
-                num_states=None,
-                num_edges=None,
-                num_relations=num_relations,
-                discrepancy=None,
-                is_valid=None,
-                algorithm='iita',
-                final_generation=None,
-                execution_time_seconds=int(time.time() - start_time),
-                result_metadata={'png_key': png_storage_key, **result_data.get('metadata', {})}
-            )
-        else:  # NEAT
+        # Parse NEAT metadata (handle structured output from clustered mode)
+        if 'merged_learning_space' in result_data:
+            # NEW: Structured output from clustered mode
+            learning_space = result_data['merged_learning_space']
+            num_states = len(learning_space) if isinstance(learning_space, dict) else 0
+            num_edges = sum(len(v) for v in learning_space.values()) if isinstance(learning_space, dict) else 0
+        else:
+            # OLD: Direct learning space output (non-clustered mode)
             num_states = len(result_data) if isinstance(result_data, dict) else 0
             num_edges = sum(len(v) for v in result_data.values()) if isinstance(result_data, dict) else 0
-            
-            db_result = Result(
-                task_id=task_id,
-                graph_storage_key=json_storage_key,
-                num_states=num_states,
-                num_edges=num_edges,
-                num_relations=None,
-                discrepancy=None,
-                is_valid=True,
-                algorithm='neat',
-                final_generation=task.current_generation,
-                execution_time_seconds=int(time.time() - start_time),
-                result_metadata={'png_key': png_storage_key}
-            )
+        
+        db_result = Result(
+            task_id=task_id,
+            graph_storage_key=json_storage_key,
+            num_states=num_states,
+            num_edges=num_edges,
+            num_relations=None,
+            discrepancy=None,
+            is_valid=True,
+            algorithm='neat',
+            final_generation=task.current_generation,
+            execution_time_seconds=int(time.time() - start_time),
+            result_metadata={'png_key': png_storage_key}
+        )
         
         os.unlink(output_json)
         db.add(db_result)

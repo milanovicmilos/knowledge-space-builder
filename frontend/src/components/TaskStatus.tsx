@@ -28,7 +28,7 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
           
           // Fetch JSON graph data
           try {
-            const response = await fetch(`/api/v1/results/results/${taskId}/download`);
+            const response = await fetch(`/api/v1/results/${taskId}/download`);
             if (response.ok) {
               const jsonData = await response.json();
               setGraphData(jsonData);
@@ -84,12 +84,10 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
     switch (details.stage) {
       case 'initializing':
         return 'Preparing environment...';
-      case 'matrix_completion':
-        return `Matrix completion: ${details.iteration}/${details.max_iteration} (RMSE: ${details.rmse?.toFixed(4)})`;
+      case 'clustering':
+        return `Item clustering: K=${details.cluster_k} (silhouette: ${details.silhouette_score?.toFixed(3)})`;
       case 'evolution':
         return `Generation ${details.generation}${details.max_generation ? `/${details.max_generation}` : ''} - Fitness: ${details.current_fitness?.toFixed(4)}`;
-      case 'analysis':
-        return `Analyzing items: ${details.current_item}/${details.total_items}`;
       case 'completed':
         return 'Analysis completed!';
       default:
@@ -141,10 +139,10 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
                   <strong>{task.progress_details.current_fitness.toFixed(4)}</strong>
                 </div>
               )}
-              {task.progress_details?.best_fitness && (
+              {task.progress_details?.cluster_k && (
                 <div className="metric">
-                  <p className="label">Best fitness</p>
-                  <strong>{task.progress_details.best_fitness.toFixed(4)}</strong>
+                  <p className="label">Clusters</p>
+                  <strong>{task.progress_details.cluster_k}</strong>
                 </div>
               )}
             </div>
@@ -226,12 +224,12 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
           </div>
 
           <div className="download-grid">
-            <button className="primary-btn" onClick={() => window.location.href = `/api/v1/results/results/${taskId}/download`}>
+            <button className="primary-btn" onClick={() => window.location.href = `/api/v1/results/${taskId}/download`}>
               <FiDownload size={16} style={{ marginRight: '0.5rem' }} />
               Download JSON
             </button>
             {result.result_metadata?.png_key && (
-              <button className="secondary-btn" onClick={() => window.location.href = `/api/v1/results/results/${taskId}/download?format=png`}>
+              <button className="secondary-btn" onClick={() => window.location.href = `/api/v1/results/${taskId}/download?format=png`}>
                 <FiImage size={16} style={{ marginRight: '0.5rem' }} />
                 Download PNG
               </button>
@@ -243,7 +241,6 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
       {result && graphData && (
         <GraphVisualization
           graphData={graphData}
-          algorithm={result.algorithm as 'neat' | 'iita'}
         />
       )}
 

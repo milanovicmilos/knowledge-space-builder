@@ -10,11 +10,11 @@ interface TaskFormProps {
 }
 
 export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
-  // Algorithm selection
-  const [useIita, setUseIita] = useState(false);
-  
-  // IITA options
-  const [iitaMaxDiff, setIitaMaxDiff] = useState(0.08);
+  // Item clustering options
+  const [cluster, setCluster] = useState(true);
+  const [rowCoverageThresh, setRowCoverageThresh] = useState(0.1);
+  const [minPairs, setMinPairs] = useState(500);
+  const [maxItemClusters, setMaxItemClusters] = useState<number | null>(null);
   
   // NEAT options
   const [generations, setGenerations] = useState(50);
@@ -23,10 +23,12 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
   const [greedy, setGreedy] = useState(false);
   const [plot, setPlot] = useState(false);
   
+  // Missing value handling
+  const [missingMatchReward, setMissingMatchReward] = useState(0.5);
+  const [missingMismatchPenalty, setMissingMismatchPenalty] = useState(1.0);
+  
   // Data options
   const [randomizeItems, setRandomizeItems] = useState(false);
-  const [useMatrixCompletion, setUseMatrixCompletion] = useState(true);
-  const [clearCache, setClearCache] = useState(false);
   
   // Output options
   const [generatePng, setGeneratePng] = useState(true);
@@ -42,16 +44,18 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
 
     try {
       const parameters: TaskParameters = {
-        use_iita: useIita,
-        iita_max_diff: iitaMaxDiff,
+        cluster,
+        row_coverage_thresh: rowCoverageThresh,
+        min_pairs: minPairs,
+        max_item_clusters: maxItemClusters,
         generations,
         patience,
         parallel,
         greedy,
         plot,
+        missing_match_reward: missingMatchReward,
+        missing_mismatch_penalty: missingMismatchPenalty,
         randomize_items: randomizeItems,
-        use_matrix_completion: useMatrixCompletion,
-        clear_cache: clearCache,
         generate_png: generatePng,
       };
 
@@ -69,8 +73,8 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
       <div className="panel-head">
         <div>
           <p className="kicker">Step 2 · Configuration</p>
-          <h3>Configure construction algorithm</h3>
-          <p className="hint">Choose approach based on matrix size. NEAT for smaller sets, IITA for 100+ items.</p>
+          <h3>Configure NEAT Algorithm</h3>
+          <p className="hint">Evolutionary algorithm with automatic item clustering for large datasets.</p>
         </div>
         <div className="pill">
           {(() => {
@@ -86,132 +90,173 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
       <form className="task-form" onSubmit={handleSubmit}>
         <div className="section">
           <div className="section-title">
-            <p className="kicker">Algorithm</p>
-            <h4>Select approach</h4>
-            <p className="hint">Settings adapt based on selection.</p>
+            <p className="kicker">Item Clustering</p>
+            <h4>Automatic data partitioning</h4>
+            <p className="hint">Divides large datasets into optimal subsets for processing.</p>
           </div>
-          <div className="choice-grid">
-            <label className={`choice ${!useIita ? 'active' : ''}`}>
-              <input type="radio" checked={!useIita} onChange={() => setUseIita(false)} />
+          <div className="field-grid">
+            <label className="field field-inline">
+              <input
+                type="checkbox"
+                checked={cluster}
+                onChange={(e) => setCluster(e.target.checked)}
+              />
               <div>
-                <div className="choice-title">NEAT</div>
-                <p className="hint">Evolutionary algorithm, faster for {'<'}100 items.</p>
+                <span>Enable clustering</span>
+                <small>Recommended for 50+ items.</small>
               </div>
             </label>
-            <label className={`choice ${useIita ? 'active' : ''}`}>
-              <input type="radio" checked={useIita} onChange={() => setUseIita(true)} />
+
+            {cluster && (
+              <>
+                <label className="field">
+                  <span>Row coverage threshold</span>
+                  <input
+                    type="number"
+                    min="0.01"
+                    max="1.0"
+                    step="0.01"
+                    value={rowCoverageThresh}
+                    onChange={(e) => setRowCoverageThresh(parseFloat(e.target.value))}
+                  />
+                  <small>Students with ≥this% answered items (sparse data: 0.05-0.15, dense: 0.8).</small>
+                </label>
+                <label className="field">
+                  <span>Minimum pairs per cluster</span>
+                  <input
+                    type="number"
+                    min="100"
+                    max="5000"
+                    step="50"
+                    value={minPairs}
+                    onChange={(e) => setMinPairs(parseInt(e.target.value))}
+                  />
+                  <small>Minimum item-pair combinations required.</small>
+                </label>
+                <label className="field">
+                  <span>Max item clusters (optional)</span>
+                  <input
+                    type="number"
+                    min="2"
+                    max="20"
+                    value={maxItemClusters ?? ''}
+                    placeholder="Auto"
+                    onChange={(e) => setMaxItemClusters(e.target.value ? parseInt(e.target.value) : null)}
+                  />
+                  <small>Leave empty for automatic selection.</small>
+                </label>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="section">
+          <div className="section-title">
+            <p className="kicker">NEAT parameters</p>
+            <h4>Evolution dynamics</h4>
+          </div>
+          <div className="field-grid">
+            <label className="field field-inline">
+              <input
+                type="checkbox"
+                checked={greedy}
+                onChange={(e) => setGreedy(e.target.checked)}
+              />
               <div>
-                <div className="choice-title">IITA</div>
-                <p className="hint">Inductive Item Tree Analysis for large matrices.</p>
+                <span>Greedy mode</span>
+                <small>Stop at first valid solution.</small>
+              </div>
+            </label>
+
+            {!greedy && (
+              <>
+                <label className="field">
+                  <span>Generations (max)</span>
+                  <input
+                    type="number"
+                    min="10"
+                    max="500"
+                    value={generations}
+                    onChange={(e) => setGenerations(parseInt(e.target.value))}
+                  />
+                  <small>Number of evolution iterations.</small>
+                </label>
+                <label className="field">
+                  <span>Patience</span>
+                  <input
+                    type="number"
+                    min="5"
+                    max="100"
+                    value={patience}
+                    onChange={(e) => setPatience(parseInt(e.target.value))}
+                  />
+                  <small>Early stop if no improvement.</small>
+                </label>
+              </>
+            )}
+
+            <label className="field field-inline">
+              <input
+                type="checkbox"
+                checked={parallel}
+                onChange={(e) => setParallel(e.target.checked)}
+              />
+              <div>
+                <span>Parallel processing</span>
+                <small>Better multi-core CPU utilization.</small>
+              </div>
+            </label>
+
+            <label className="field field-inline">
+              <input
+                type="checkbox"
+                checked={plot}
+                onChange={(e) => setPlot(e.target.checked)}
+              />
+              <div>
+                <span>Show graph during evolution</span>
+                <small>Visual feedback during execution.</small>
               </div>
             </label>
           </div>
         </div>
 
-        {useIita ? (
-          <div className="section">
-            <div className="section-title">
-              <p className="kicker">IITA parameters</p>
-              <h4>Relation precision</h4>
-            </div>
-            <div className="field-grid">
-              <label className="field">
-                <span>Max diff threshold</span>
-                <input
-                  type="number"
-                  min="0.01"
-                  max="0.2"
-                  step="0.01"
-                  value={iitaMaxDiff}
-                  onChange={(e) => setIitaMaxDiff(parseFloat(e.target.value))}
-                />
-                <small>Default 0.08 · lower values = stricter prerequisites.</small>
-              </label>
-            </div>
-          </div>
-        ) : (
-          <div className="section">
-            <div className="section-title">
-              <p className="kicker">NEAT parameters</p>
-              <h4>Evolution dynamics</h4>
-            </div>
-            <div className="field-grid">
-              <label className="field field-inline">
-                <input
-                  type="checkbox"
-                  checked={greedy}
-                  onChange={(e) => setGreedy(e.target.checked)}
-                />
-                <div>
-                  <span>Greedy mode</span>
-                  <small>Stop at first valid solution.</small>
-                </div>
-              </label>
-
-              {!greedy && (
-                <>
-                  <label className="field">
-                    <span>Generations (max)</span>
-                    <input
-                      type="number"
-                      min="10"
-                      max="500"
-                      value={generations}
-                      onChange={(e) => setGenerations(parseInt(e.target.value))}
-                    />
-                    <small>Number of evolution iterations.</small>
-                  </label>
-                  <label className="field">
-                    <span>Patience</span>
-                    <input
-                      type="number"
-                      min="5"
-                      max="100"
-                      value={patience}
-                      onChange={(e) => setPatience(parseInt(e.target.value))}
-                    />
-                    <small>Early stop if no improvement.</small>
-                  </label>
-                </>
-              )}
-
-              <label className="field field-inline">
-                <input
-                  type="checkbox"
-                  checked={parallel}
-                  onChange={(e) => setParallel(e.target.checked)}
-                />
-                <div>
-                  <span>Parallel processing</span>
-                  <small>Better multi-core CPU utilization.</small>
-                </div>
-              </label>
-
-              <label className="field field-inline">
-                <input
-                  type="checkbox"
-                  checked={plot}
-                  onChange={(e) => setPlot(e.target.checked)}
-                />
-                <div>
-                  <span>Show graph during evolution</span>
-                  <small>Visual feedback during execution.</small>
-                </div>
-              </label>
-            </div>
-          </div>
-        )}
-
         <div className="section">
           <div className="section-title advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
             <div>
               <p className="kicker">Advanced options</p>
-              <h4>Input and output control</h4>
+              <h4>Missing values & output control</h4>
             </div>
             <span className="toggle">{showAdvanced ? 'Hide' : 'Show'}</span>
           </div>
           {showAdvanced && (
             <div className="field-grid">
+              <label className="field">
+                <span>Missing match reward</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={missingMatchReward}
+                  onChange={(e) => setMissingMatchReward(parseFloat(e.target.value))}
+                />
+                <small>Reward when both values are missing (0.5).</small>
+              </label>
+
+              <label className="field">
+                <span>Missing mismatch penalty</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="5"
+                  step="0.1"
+                  value={missingMismatchPenalty}
+                  onChange={(e) => setMissingMismatchPenalty(parseFloat(e.target.value))}
+                />
+                <small>Penalty when one value is missing (1.0).</small>
+              </label>
+
               <label className="field field-inline">
                 <input
                   type="checkbox"
@@ -221,30 +266,6 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
                 <div>
                   <span>Randomize items</span>
                   <small>Random column selection on each run.</small>
-                </div>
-              </label>
-
-              <label className="field field-inline">
-                <input
-                  type="checkbox"
-                  checked={useMatrixCompletion}
-                  onChange={(e) => setUseMatrixCompletion(e.target.checked)}
-                />
-                <div>
-                  <span>Matrix completion (ALS)</span>
-                  <small>Fill missing values.</small>
-                </div>
-              </label>
-
-              <label className="field field-inline">
-                <input
-                  type="checkbox"
-                  checked={clearCache}
-                  onChange={(e) => setClearCache(e.target.checked)}
-                />
-                <div>
-                  <span>Clear cache before start</span>
-                  <small>Clean environment guarantee.</small>
                 </div>
               </label>
 

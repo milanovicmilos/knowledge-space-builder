@@ -17,6 +17,7 @@ class ResultResponse(BaseModel):
     execution_time_seconds: int | None
     result_metadata: Dict[str, Any] | None
     created_at: datetime
+    learning_space: Dict[str, Any] | None = None  # ADD: learning space data from storage
     
     class Config:
         from_attributes = True

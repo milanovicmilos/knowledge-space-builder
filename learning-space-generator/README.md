@@ -1,103 +1,131 @@
 # Learning Space Generator
 
-<p align="center">
-  <img src="./images/ls_0.png" alt="image">
-  <img src="./images/ls_1.png" alt="image">
-  <img src="./images/ls_2.png" alt="image">
-</p>
+Evolutionary algorithm for constructing optimal [learning spaces](https://arxiv.org/abs/1511.06757) from response patterns using NEAT with automatic item clustering.
 
-Search for the optimal [learning space](https://arxiv.org/abs/1511.06757) from response
-patterns obtained from exam scores data.
+## Features
 
-NEAT algorithm is adapted to search for the best learning space with respect to
-observed response patterns in exam data. Proposed algorithm is evaluated and
-its performance is compared with IITA algorithm. Reconstruction simulation
-results can be found [here](./simulation).
+- **NEAT Algorithm**: Evolutionary search for optimal learning spaces
+- **Item Clustering**: Automatic partitioning for datasets with 50+ items
+- **Missing Value Handling**: Native support for incomplete response data
+- **Automatic K Selection**: Silhouette-based cluster count determination
+- **Original Item IDs**: Preserves question codes (M178832, M178357...) in output
 
 ## Installation
 
-`python 3.5+`, `pip` and `git` are required for installation.
-
-Clone repository and install requirements
+Requires Python 3.10+
 
 ```bash
-git clone https://github.com/nemanja-m/learning-space-generator.git
 cd learning-space-generator
 pip install -r requirements.txt
 ```
 
-Requirements should be installed under virtual env.
-
-### Additional Dependencies
-
-`graphviz` library is required to export learning space graph as PNG image.
-
-On ubuntu based OS install `graphviz` with
-
-```bash
-sudo apt-get install grahviz
-```
-
-Check [graphviz](https://www.graphviz.org/download/) for more details.
-
-### Tests
-
-Run tests with `python -m pytest`.
+Use virtual environment for dependency isolation.
 
 ## Usage
 
-Run NEAT algorithm to find the optimal learning space with:
+### Basic Usage (No Clustering)
 
 ```bash
-python -m lsg.run --generations=50 --parallel
+python -m lsg.run --data-path data/ResponsePatterns.csv --generations 50 --parallel --json output.json
 ```
 
-This will start NEAT for 50 generations and parallel genome evaluation.
+### With Item Clustering (Recommended for 50+ Items)
 
-Run `python -m lsg.run --help` for help about available arguments.
+```bash
+python -m lsg.run \
+  --data-path data/ResponsePatterns.csv \
+  --cluster \
+  --row-coverage-thresh 0.8 \
+  --min-pairs 500 \
+  --generations 50 \
+  --patience 20 \
+  --parallel \
+  --json output.json
+```
 
-Input is binary matrix of shape `NxM` where `N` is a number of response patterns, and
-`M` is a number of items in domain. Check out [sample dataset](./data/ks_data.csv).
+### Parameters
 
-### Configuration
+**Item Clustering Options:**
+- `--cluster`: Enable automatic item clustering
+- `--row-coverage-thresh`: Minimum row coverage per cluster (default: 0.8)
+- `--min-pairs`: Minimum item pairs per cluster (default: 500)
+- `--max-item-clusters`: Maximum clusters (auto if omitted)
 
-[neat-python](https://neat-python.readthedocs.io/en/latest/) is used as a
-library for NEAT algorithm. `neat-python` provides a configuration `ini` file
-that is used to configure different parts of NEAT.  Check [neat-python
-docs](https://neat-python.readthedocs.io/en/latest/) for more details about
-`neat-python` configuration.
+**NEAT Options:**
+- `--generations`: Maximum evolution iterations (default: 50)
+- `--patience`: Early stopping patience (default: 20)
+- `--parallel`: Enable parallel genome evaluation
+- `--greedy`: Stop at first valid solution
 
-Configuration [file](config/default.ini) with tweaked NEAT parameters contains
-only parameters of interest for learning space generation.
-`[LearningSpaceGenome]` section contains parameters that change behaviour of
-learning space genome:
+**Missing Value Options:**
+- `--missing-match-reward`: Reward for matching missing values (default: 0.5)
+- `--missing-mismatch-penalty`: Penalty for mismatched missing (default: 1.0)
 
-- `knowledge_items (int)`: number of knowledge items in observed response patterns
-- `mutation_prob (float)`: Probability that random knowledge state node will mutate
-- `mutation_sampling_dist (str: uniform or power)`: Probability distribution function that is used to select
-knowledge state node for mutation
+**Output:**
+- `--json <path>`: Save learning space as JSON
+- `--png <path>`: Export graph visualization
 
-Additional parameters like number of evolution generations or termination
-fitness threshold are set via `lsg.run` CLI. Check `python -m lsg.run --help` for more
-details.
+Run `python -m lsg.run --help` for full options.
+
+## Input Format
+
+CSV matrix (NxM): N response patterns × M knowledge items
+
+Example:
+```csv
+M178832,M178357,M176963,...
+1,0,1,...
+-,1,0,...
+1,1,1,...
+```
+
+- `1` = correct answer
+- `0` = incorrect answer  
+- `-` or empty = missing value
+
+## Output Format
+
+JSON with original item IDs:
+
+```json
+{
+  "∅": ["{M178832}", "{M178357}"],
+  "{M178832}": ["{M178832, M178357}"],
+  "{M178357}": ["{M178832, M178357}"],
+  "{M178832, M178357}": []
+}
+```
+
+Keys = knowledge states, Values = successor states
 
 ## Algorithm Details
 
-Construction of learning spaces (or knowledge spaces) may be difficult to
-manage because learning spaces are huge combinatorial structures and search
-space is enormous. To find the optimal learning space with _n_ knowledge items
-(assessment questions), space of `2^n` must be searched. In typical real-world
-application _n_ is 15+.
+NEAT (NeuroEvolution of Augmenting Topologies) adapted for learning space construction:
 
-There are two main algorithm types for learning space construction:
+- **Genome**: Represents learning space as directed acyclic graph (DAG)
+- **Constraints**: Enforces closure under union, empty state presence
+- **Fitness**: Measures correspondence to observed response patterns
+- **Missing-Aware**: Evaluates fitness with mask arrays for incomplete data
 
-- data driven, where learning space is derived from observed response patterns,
-- domain expert querying, where domain expert answers some questions about
-domain to form adequate learning space.
+### Item Clustering
 
-To overcome problem with huge search space, NEAT algorithm is used to evolve
-the optimal learning space while preserving mathematical defined constrains
-(closure under union and presence of empty and full knowledge state).
+For datasets with 50+ items:
+1. Computes pairwise item distance from response patterns
+2. Agglomerative hierarchical clustering with Ward linkage
+3. Silhouette analysis selects optimal K
+4. NEAT runs independently on each cluster
+5. Results merged into unified learning space
+
+## Configuration
+
+NEAT parameters in [config/default.ini](config/default.ini):
+- Genome structure settings
+- Mutation/crossover probabilities
+- Fitness evaluation thresholds
+
+## License
+
+MIT License - see [LICENSE](LICENSE)
 
 ### Gene
 

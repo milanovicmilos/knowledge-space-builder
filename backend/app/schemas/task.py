@@ -4,11 +4,11 @@ from typing import Dict, Any
 
 
 class TaskParameters(BaseModel):
-    # Algorithm selection
-    use_iita: bool = False
-    
-    # IITA options
-    iita_max_diff: float = 0.08
+    # Item clustering options (NEW)
+    cluster: bool = True  # Enable item clustering (always recommended)
+    row_coverage_thresh: float = 0.8  # Minimum row coverage per cluster
+    min_pairs: int = 500  # Minimum item pairs per cluster
+    max_item_clusters: int | None = None  # Max clusters (auto if None)
     
     # NEAT options
     generations: int = 50
@@ -17,10 +17,12 @@ class TaskParameters(BaseModel):
     greedy: bool = False  # Run until first valid solution
     plot: bool = False  # Show graph during evolution
     
+    # Missing value handling
+    missing_match_reward: float = 0.5  # Reward for matching missing values
+    missing_mismatch_penalty: float = 1.0  # Penalty for mismatched missing
+    
     # Data options
     randomize_items: bool = False
-    use_matrix_completion: bool = True
-    clear_cache: bool = False
     
     # Output options
     generate_png: bool = True  # Generate PNG visualization

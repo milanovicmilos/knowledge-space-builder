@@ -78,9 +78,9 @@ export function ResultsPanel({ onOpenTask }: ResultsPanelProps) {
                   <td>{new Date(it.created_at).toLocaleString()}</td>
                   <td className="actions">
                     <button className="secondary-btn" onClick={() => onOpenTask(it.task_id)}>Open graph</button>
-                    <a className="ghost-btn" href={`/api/v1/results/results/${it.task_id}/download`}>JSON</a>
+                    <a className="ghost-btn" href={`/api/v1/results/${it.task_id}/download`}>JSON</a>
                     {it.has_png && (
-                      <a className="ghost-btn" href={`/api/v1/results/results/${it.task_id}/download?format=png`}>PNG</a>
+                      <a className="ghost-btn" href={`/api/v1/results/${it.task_id}/download?format=png`}>PNG</a>
                     )}
                     <button 
                       className="ghost-btn delete-btn"
