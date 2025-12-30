@@ -15,6 +15,8 @@ export interface TaskParameters {
   row_coverage_thresh: number;
   min_pairs: number;
   max_item_clusters?: number | null;
+  dense_students: boolean;
+  target_density: number;
   
   // NEAT options
   generations: number;
