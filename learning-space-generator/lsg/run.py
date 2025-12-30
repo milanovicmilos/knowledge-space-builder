@@ -13,7 +13,7 @@ import neat
 import pandas as pd
 import numpy as np
 from scipy.sparse.linalg import svds
-from sklearn.cluster import KMeans, AgglomerativeClustering
+from sklearn.cluster import KMeans, AgglomerativeClustering, SpectralBiclustering
 from sklearn.metrics import silhouette_score
 
 try:
@@ -332,6 +332,307 @@ def _pairwise_item_similarity(values_df: pd.DataFrame,
     return sim
 
 
+def bicluster_response_patterns(path: str,
+                                target_clusters: int = 5,
+                                min_density: float = 0.8,
+                                min_items: int = 5,
+                                min_students: int = 100,
+                                knowledge_items: Optional[int] = None,
+                                randomize: bool = True) -> Tuple[list, dict]:
+    """
+    BICLUSTERING: Simultano klasterizuje i pitanja (items) i studente.
+    Cilj: Nađi "guste regione" u matrici gde skup studenata ima kompletne (ili skoro kompletne)
+    odgovore na skup pitanja.
+    
+    Ovo omogućava:
+    - Visoku gustinu podataka po klasteru (minimalno NA vrednosti)
+    - NEAT može kreirati kompletne learning space grafove {} → {svi itemi}
+    - Bolja kontrola kvaliteta podataka
+    
+    Args:
+        path: putanja do CSV fajla
+        target_clusters: ciljani broj biclustera
+        min_density: minimalna gustina (popunjenost) biclustera (0-1)
+        min_items: minimalan broj pitanja po biclusteru
+        min_students: minimalan broj studenata po biclusteru
+        knowledge_items: broj pitanja za analizu
+        randomize: random shuffling
+    
+    Returns:
+        (clusters, metadata)
+        clusters: lista biclustera sa response_patterns_neat, item_names, student_indices
+        metadata: globalni info
+    """
+    sep = _infer_delimiter(path)
+    logger.info(f"\n{'='*80}")
+    logger.info("BICLUSTERING (simultano pitanja × studenti)")
+    logger.info(f"{'='*80}")
+    logger.info(f"File: {Path(path).name}")
+    logger.info(f"Target clusters: {target_clusters}, Min density: {min_density:.1%}")
+    
+    df = pd.read_csv(path, sep=sep)
+    all_binary = _identify_binary_columns(df)
+    if not all_binary:
+        raise ValueError('No binary response columns found.')
+    
+    if knowledge_items:
+        selected_all = all_binary[:knowledge_items]
+    else:
+        selected_all = all_binary
+    
+    sub = df[selected_all].copy()
+    n_students, n_items = sub.shape
+    logger.info(f"Data: {n_students:,} students × {n_items} items")
+    
+    overall_density = sub.notna().sum().sum() / (n_students * n_items)
+    logger.info(f"Overall density: {overall_density:.1%}")
+    
+    # Konvertuj u numeričku matricu (NA → -1, 0/1 ostaju)
+    data_matrix = sub.fillna(-1).astype(float).values
+    
+    # Koristi SpectralBiclustering iz sklearn
+    logger.info(f"\nRunning SpectralBiclustering...")
+    model = SpectralBiclustering(
+        n_clusters=target_clusters,
+        method='log',
+        random_state=42
+    )
+    
+    try:
+        model.fit(data_matrix)
+    except Exception as e:
+        logger.error(f"Biclustering failed: {e}")
+        logger.info("Falling back to greedy biclustering...")
+        return _greedy_bicluster(df, selected_all, target_clusters, min_density, min_items, min_students)
+    
+    row_labels = model.row_labels_
+    col_labels = model.column_labels_
+    
+    logger.info(f"Biclustering complete. Extracting dense biclusters...")
+    
+    # Ekstrahovati biclusters
+    clusters = []
+    cluster_id = 0
+    
+    for row_cluster in range(target_clusters):
+        for col_cluster in range(target_clusters):
+            # Nađi studente i pitanja u ovom biclusteru
+            student_mask = row_labels == row_cluster
+            item_mask = col_labels == col_cluster
+            
+            student_indices = np.where(student_mask)[0]
+            item_indices = np.where(item_mask)[0]
+            
+            if len(student_indices) < min_students or len(item_indices) < min_items:
+                continue
+            
+            # Izvuci submatricu
+            bicluster_data = sub.iloc[student_indices, item_indices]
+            
+            # Računaj gustinu (non-NA fraction)
+            density = bicluster_data.notna().sum().sum() / bicluster_data.size
+            
+            if density < min_density:
+                continue
+            
+            # Prihvati ovaj bicluster
+            item_names = [selected_all[i] for i in item_indices]
+            
+            # Enkoduj response patterns (sa '-' za missing)
+            def encode_missing(df_part: pd.DataFrame) -> list:
+                patterns = []
+                for row in df_part.values:
+                    out = []
+                    for v in row:
+                        if pd.isna(v):
+                            out.append('-')
+                        else:
+                            try:
+                                iv = int(v)
+                            except Exception:
+                                iv = int(float(v))
+                            out.append('1' if iv == 1 else '0')
+                    patterns.append(''.join(out))
+                return patterns
+            
+            rp_neat = encode_missing(bicluster_data)
+            
+            clusters.append({
+                'item_names': item_names,
+                'student_indices': student_indices.tolist(),
+                'row_count_kept': len(student_indices),
+                'col_count': len(item_names),
+                'response_patterns_neat': rp_neat,
+                'stats': {
+                    'density': float(density),
+                    'row_cluster': int(row_cluster),
+                    'col_cluster': int(col_cluster)
+                }
+            })
+            
+            logger.info(f"  Bicluster {cluster_id}: {len(item_names)} items × {len(student_indices)} students, density={density:.2%}")
+            cluster_id += 1
+    
+    if not clusters:
+        logger.warning("No biclusters met criteria. Falling back to greedy approach...")
+        return _greedy_bicluster(df, selected_all, target_clusters, min_density, min_items, min_students)
+    
+    logger.info(f"\n✓ Created {len(clusters)} biclusters")
+    
+    # Računaj koliko pitanja je pokriveno
+    covered_items = set()
+    for c in clusters:
+        covered_items.update(c['item_names'])
+    
+    meta = {
+        'total_rows': int(n_students),
+        'total_binary_cols': int(len(all_binary)),
+        'selected_cols': int(len(selected_all)),
+        'formed_clusters': int(len(clusters)),
+        'all_items': selected_all,
+        'covered_items': sorted(covered_items),
+        'coverage_percent': float(len(covered_items) / len(selected_all) * 100)
+    }
+    
+    logger.info(f"Item coverage: {len(covered_items)}/{len(selected_all)} ({meta['coverage_percent']:.1f}%)")
+    
+    return clusters, meta
+
+
+def _greedy_bicluster(df: pd.DataFrame,
+                     selected_all: list,
+                     target_clusters: int,
+                     min_density: float,
+                     min_items: int,
+                     min_students: int) -> Tuple[list, dict]:
+    """
+    Greedy biclustering fallback: iterativno nađi najbolje (items × students) kombinacije.
+    """
+    logger.info("Greedy biclustering: finding dense regions iteratively...")
+    
+    clusters = []
+    used_items = set()
+    
+    sub = df[selected_all].copy()
+    
+    for cluster_id in range(target_clusters):
+        # Nađi preostala pitanja
+        remaining_items = [item for item in selected_all if item not in used_items]
+        
+        if len(remaining_items) < min_items:
+            logger.info(f"  Insufficient remaining items ({len(remaining_items)} < {min_items}), stopping.")
+            break
+        
+        best_density = 0
+        best_items = None
+        best_students = None
+        
+        # Probaj različite kombinacije pitanja (greedy: počni sa najboljim, dodaj još)
+        # Start: nađi pitanje sa najmanje missing vrednosti
+        item_missing = sub[remaining_items].isna().mean()
+        sorted_items = item_missing.sort_values().index.tolist()
+        
+        # Greedy: počni sa top pitanjem, dodaj po jedno
+        current_items = []
+        for seed_item in sorted_items[:min(10, len(sorted_items))]:
+            current_items = [seed_item]
+            
+            # Nađi studente koji imaju odgovor na ovo pitanje
+            valid_students = sub[seed_item].notna()
+            
+            # Dodaj još pitanja koja ne smanjuju mnogo broj studenata
+            for next_item in sorted_items:
+                if next_item in current_items or next_item in used_items:
+                    continue
+                
+                test_items = current_items + [next_item]
+                test_sub = sub.loc[valid_students, test_items]
+                test_density = test_sub.notna().sum().sum() / test_sub.size
+                test_students = test_sub.dropna().index
+                
+                if test_density >= min_density and len(test_students) >= min_students and len(test_items) <= 20:
+                    current_items = test_items
+                    valid_students = test_students
+                
+                if len(current_items) >= 20:  # limit
+                    break
+            
+            # Proveri ovaj kandidat
+            candidate_sub = sub.loc[valid_students, current_items]
+            candidate_density = candidate_sub.notna().sum().sum() / candidate_sub.size
+            
+            if (candidate_density >= min_density and 
+                len(valid_students) >= min_students and 
+                len(current_items) >= min_items and
+                candidate_density > best_density):
+                
+                best_density = candidate_density
+                best_items = current_items
+                best_students = valid_students
+        
+        if best_items is None:
+            logger.info(f"  Cluster {cluster_id}: no valid bicluster found, stopping.")
+            break
+        
+        # Sačuvaj ovaj bicluster
+        bicluster_data = sub.loc[best_students, best_items]
+        
+        def encode_missing(df_part: pd.DataFrame) -> list:
+            patterns = []
+            for row in df_part.values:
+                out = []
+                for v in row:
+                    if pd.isna(v):
+                        out.append('-')
+                    else:
+                        try:
+                            iv = int(v)
+                        except Exception:
+                            iv = int(float(v))
+                        out.append('1' if iv == 1 else '0')
+                patterns.append(''.join(out))
+            return patterns
+        
+        rp_neat = encode_missing(bicluster_data)
+        
+        clusters.append({
+            'item_names': best_items,
+            'student_indices': best_students.tolist(),
+            'row_count_kept': len(best_students),
+            'col_count': len(best_items),
+            'response_patterns_neat': rp_neat,
+            'stats': {
+                'density': float(best_density),
+                'greedy_iteration': cluster_id
+            }
+        })
+        
+        logger.info(f"  Bicluster {cluster_id}: {len(best_items)} items × {len(best_students)} students, density={best_density:.2%}")
+        
+        # Označi ova pitanja kao iskorišćena
+        used_items.update(best_items)
+    
+    logger.info(f"\n✓ Greedy created {len(clusters)} biclusters")
+    
+    covered_items = set()
+    for c in clusters:
+        covered_items.update(c['item_names'])
+    
+    meta = {
+        'total_rows': int(len(df)),
+        'total_binary_cols': int(len(selected_all)),
+        'selected_cols': int(len(selected_all)),
+        'formed_clusters': int(len(clusters)),
+        'all_items': selected_all,
+        'covered_items': sorted(covered_items),
+        'coverage_percent': float(len(covered_items) / len(selected_all) * 100) if selected_all else 0
+    }
+    
+    logger.info(f"Item coverage: {len(covered_items)}/{len(selected_all)} ({meta['coverage_percent']:.1f}%)")
+    
+    return clusters, meta
+
+
 def item_cluster_response_patterns(path: str,
                                    items_min: Optional[int] = None,
                                    items_max: Optional[int] = None,
@@ -339,14 +640,16 @@ def item_cluster_response_patterns(path: str,
                                    min_pairs: int = 500,
                                    max_item_clusters: int = 10,
                                    knowledge_items: Optional[int] = None,
-                                   randomize: bool = True) -> Tuple[list, dict]:
+                                   randomize: bool = True,
+                                   dense_student_selection: bool = False,
+                                   target_density: float = 0.9) -> Tuple[list, dict]:
     """
     PARTITION all items into K non-overlapping clusters via item similarity clustering.
     SVAKO pitanje ide u TAČNO JEDAN klaster. Zbir svih item-a u svim klasterima = ukupan broj item-a.
     
     K se bira automatski na osnovu silhouette score analize (higher = better separated clusters).
     
-    Returns: clusters list with keys: response_patterns_iita, response_patterns_neat, item_names,
+    Returns: clusters list with keys: response_patterns_neat, item_names,
     and stats.
     """
     sep = _infer_delimiter(path)
@@ -488,13 +791,40 @@ def item_cluster_response_patterns(path: str,
     clusters = []
     for cid, cols in enumerate(clusters_items):
         block = sub[cols]
-        # Keep rows that have at least row_coverage_thresh observed within these columns
-        row_obs = block.notna().mean(axis=1)
-        keep = row_obs >= row_coverage_thresh
-        block_kept = block[keep]
+        
+        if dense_student_selection:
+            # NOVA LOGIKA: Aktivno selektuj studente sa najvišom gustinom za ovaj klaster
+            logger.info(f"  Cluster {cid}: Dense student selection active (target density={target_density:.0%})")
+            
+            # Računaj gustinu po studentu za ova pitanja
+            student_density = block.notna().mean(axis=1)
+            
+            # Sortiraj studente po gustini (najbolji na vrhu)
+            sorted_students = student_density.sort_values(ascending=False)
+            
+            # Prvo pokušaj: uzmi studente sa gustinom >= target_density
+            high_density_students = sorted_students[sorted_students >= target_density]
+            
+            if len(high_density_students) >= 100:
+                # Dovoljno studenata sa visokom gustinom
+                keep_indices = high_density_students.index
+                block_kept = block.loc[keep_indices]
+                logger.info(f"    → Found {len(keep_indices)} students with density >= {target_density:.0%}")
+            else:
+                # Fallback: uzmi top N studenata (makar 500 ili koliko ima)
+                top_n = min(1000, len(sorted_students))
+                keep_indices = sorted_students.head(top_n).index
+                block_kept = block.loc[keep_indices]
+                actual_density = student_density[keep_indices].mean()
+                logger.info(f"    → Not enough high-density students, taking top {len(keep_indices)} (avg density={actual_density:.2%})")
+        else:
+            # STARA LOGIKA: Keep rows that have at least row_coverage_thresh observed
+            row_obs = block.notna().mean(axis=1)
+            keep = row_obs >= row_coverage_thresh
+            block_kept = block[keep]
         
         if block_kept.shape[0] < 50:  # minimum students per cluster
-            logger.warning(f"Cluster {cid} ({len(cols)} items): samo {block_kept.shape[0]} studenata sa >{row_coverage_thresh*100:.0f}% coverage - preskačem")
+            logger.warning(f"Cluster {cid} ({len(cols)} items): samo {block_kept.shape[0]} studenata - preskačem")
             continue
 
         # IITA patterns: complete rows only
@@ -528,17 +858,22 @@ def item_cluster_response_patterns(path: str,
         rp_neat = encode_missing(block_kept)
         
         density_kept = block_kept.notna().sum().sum() / (block_kept.shape[0] * block_kept.shape[1])
+        
+        # Calculate avg coverage for stats
+        if dense_student_selection:
+            avg_coverage_percent = block_kept.notna().mean(axis=1).mean() * 100.0
+        else:
+            avg_coverage_percent = row_obs[keep].mean() * 100.0
 
         clusters.append({
             'item_names': cols,
             'row_count_kept': int(block_kept.shape[0]),
             'row_count_complete': int(block_complete.shape[0]),
             'col_count': int(len(cols)),
-            'response_patterns_iita': rp_iita,
             'response_patterns_neat': rp_neat,
             'stats': {
                 'row_coverage_thresh': float(row_coverage_thresh),
-                'avg_row_obs_kept_percent': float(row_obs[keep].mean() * 100.0),
+                'avg_row_obs_kept_percent': float(avg_coverage_percent),
                 'density_kept': float(density_kept)
             }
         })
@@ -748,6 +1083,16 @@ def parse_command_line_args() -> argparse.Namespace:
                              'space is created.')
     parser.add_argument('--cluster', action='store_true',
                         help='Partition items into non-overlapping domains via similarity clustering.')
+    parser.add_argument('--bicluster', action='store_true',
+                        help='Use biclustering (simultaneous item×student clustering) for dense regions.')
+    parser.add_argument('--bicluster-n', type=int, default=5,
+                        help='[bicluster] Target number of biclusters.')
+    parser.add_argument('--bicluster-density', type=float, default=0.8,
+                        help='[bicluster] Minimum density (non-NA fraction) per bicluster.')
+    parser.add_argument('--bicluster-min-items', type=int, default=5,
+                        help='[bicluster] Minimum items per bicluster.')
+    parser.add_argument('--bicluster-min-students', type=int, default=100,
+                        help='[bicluster] Minimum students per bicluster.')
     parser.add_argument('--items-min', type=int, default=None,
                         help='[items mode] Minimum items per item cluster. Auto-computed if not specified.')
     parser.add_argument('--items-max', type=int, default=None,
@@ -759,6 +1104,10 @@ def parse_command_line_args() -> argparse.Namespace:
     parser.add_argument('--max-item-clusters', type=int, default=None,
                         help='[items mode] Max number of item clusters to attempt. '
                              'If not set, automatically determines based on data (recommended).')
+    parser.add_argument('--dense-students', action='store_true',
+                        help='[items mode] Actively select students with highest density per cluster.')
+    parser.add_argument('--target-density', type=float, default=0.9,
+                        help='[items mode with --dense-students] Target density for student selection.')
     parser.add_argument('--missing-match-reward', type=float, default=0.0,
                         help='[NEAT only] Reward for matches on observed entries.')
     parser.add_argument('--missing-mismatch-penalty', type=float, default=1.0,
@@ -777,10 +1126,25 @@ if __name__ == '__main__':
     num_items = _parse_knowledge_items(config['LearningSpaceGenome'].get('knowledge_items'))
     
     # ============================================================
-    # DATA INGESTION: ITEM CLUSTERING vs FULL DATASET
+    # DATA INGESTION: BICLUSTERING vs ITEM CLUSTERING vs FULL DATASET
     # ============================================================
     clustered = None
-    if args.cluster:
+    if args.bicluster:
+        biclusters, global_meta = bicluster_response_patterns(
+            path=args.data_path,
+            target_clusters=args.bicluster_n,
+            min_density=args.bicluster_density,
+            min_items=args.bicluster_min_items,
+            min_students=args.bicluster_min_students,
+            knowledge_items=num_items,
+            randomize=args.randomize_items
+        )
+        if not biclusters:
+            raise SystemExit("No biclusters formed. Try lowering --bicluster-density or --bicluster-min-students.")
+        logger.info(f"Formed {len(biclusters)} biclusters; proceeding per-bicluster.")
+        clustered = biclusters
+        actual_num_items = clustered[0]['col_count']
+    elif args.cluster:
         item_clusters, global_meta = item_cluster_response_patterns(
             path=args.data_path,
             items_min=args.items_min,
@@ -789,7 +1153,9 @@ if __name__ == '__main__':
             min_pairs=args.min_pairs,
             max_item_clusters=args.max_item_clusters,
             knowledge_items=num_items,
-            randomize=args.randomize_items
+            randomize=args.randomize_items,
+            dense_student_selection=args.dense_students,
+            target_density=args.target_density
         )
         if not item_clusters:
             raise SystemExit("No item clusters formed. Try lowering --row-coverage-thresh.")
@@ -814,7 +1180,7 @@ if __name__ == '__main__':
     # RUN NEAT ALGORITHM
     # ============================================================
     
-    if not args.cluster:
+    if not args.cluster and not args.bicluster:
         # ============================================================
         # NEAT (ORIGINAL ALGORITHM)
         # ============================================================
@@ -897,13 +1263,16 @@ if __name__ == '__main__':
             items = cluster['item_names']
             if 'response_patterns' in cluster:
                 # students-mode cluster
-                rp_iita = cluster['response_patterns']  # already complete
-                rp_neat = cluster['response_patterns']  # same, no missing
+                rp_neat = cluster['response_patterns']  # already complete
                 row_info = f"rows={cluster['row_count']}"
-            else:
-                rp_iita = cluster['response_patterns_iita']
+            elif 'row_count_complete' in cluster:
+                # item clustering mode
                 rp_neat = cluster['response_patterns_neat']
                 row_info = f"rows_kept={cluster['row_count_kept']}, rows_complete={cluster['row_count_complete']}"
+            else:
+                # biclustering mode
+                rp_neat = cluster['response_patterns_neat']
+                row_info = f"rows={cluster['row_count_kept']}"
 
             logger.info(f"\n--- Cluster {cid}: {row_info} cols={cluster['col_count']}")
 
@@ -964,36 +1333,58 @@ if __name__ == '__main__':
         if args.json and results_index:
             import json as _json
             
+            # Determine clustering method name
+            if args.bicluster:
+                clustering_method = "biclustering"
+            else:
+                clustering_method = "hierarchical_agglomerative"
+            
             # Build proper hierarchical structure
             structured_output = {
                 "metadata": {
                     "total_items": len(global_meta['all_items']),
-                    "num_clusters": len(global_meta['clusters_items']),
+                    "num_clusters": len(clustered),
                     "algorithm": "NEAT",
-                    "clustering_method": "hierarchical_agglomerative",
-                    "k_optimal": global_meta['k_optimal']
+                    "clustering_method": clustering_method,
                 },
                 "clusters": [],
                 "isolated_items": [],
                 "merged_learning_space": {}
             }
             
+            # Add k_optimal only if it exists (item clustering mode)
+            if 'k_optimal' in global_meta:
+                structured_output['metadata']['k_optimal'] = global_meta['k_optimal']
+            
+            # Add coverage info for biclustering
+            if 'coverage_percent' in global_meta:
+                structured_output['metadata']['coverage_percent'] = global_meta['coverage_percent']
+            
             # Collect all items that appear in processed clusters
             items_in_processed = set()
             
             # Process each successfully analyzed cluster
             for item in results_index:
+                cluster_data = clustered[item['cluster']]
+                
                 cluster_info = {
                     "cluster_id": item['cluster'],
-                    "items": clustered[item['cluster']]['item_names'],
-                    "num_items": len(clustered[item['cluster']]['item_names']),
-                    "num_students": clustered[item['cluster']]['row_count_kept'],
-                    "num_complete": clustered[item['cluster']]['row_count_complete'],
-                    "density": clustered[item['cluster']]['stats']['density_kept'],
+                    "items": cluster_data['item_names'],
+                    "num_items": len(cluster_data['item_names']),
+                    "num_students": cluster_data['row_count_kept'],
                     "learning_space": None
                 }
                 
-                items_in_processed.update(clustered[item['cluster']]['item_names'])
+                # Add num_complete and density based on what's available
+                if 'row_count_complete' in cluster_data:
+                    cluster_info["num_complete"] = cluster_data['row_count_complete']
+                
+                if 'density_kept' in cluster_data.get('stats', {}):
+                    cluster_info["density"] = cluster_data['stats']['density_kept']
+                elif 'density' in cluster_data.get('stats', {}):
+                    cluster_info["density"] = cluster_data['stats']['density']
+                
+                items_in_processed.update(cluster_data['item_names'])
                 
                 # Load cluster's learning space
                 if item['json'] and os.path.exists(item['json']):

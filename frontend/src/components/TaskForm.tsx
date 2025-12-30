@@ -15,6 +15,8 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
   const [rowCoverageThresh, setRowCoverageThresh] = useState(0.1);
   const [minPairs, setMinPairs] = useState(500);
   const [maxItemClusters, setMaxItemClusters] = useState<number | null>(null);
+  const [denseStudents, setDenseStudents] = useState(false);
+  const [targetDensity, setTargetDensity] = useState(0.9);
   
   // NEAT options
   const [generations, setGenerations] = useState(50);
@@ -48,6 +50,8 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
         row_coverage_thresh: rowCoverageThresh,
         min_pairs: minPairs,
         max_item_clusters: maxItemClusters,
+        dense_students: denseStudents,
+        target_density: targetDensity,
         generations,
         patience,
         parallel,
@@ -145,6 +149,31 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
                   />
                   <small>Leave empty for automatic selection.</small>
                 </label>
+                <label className="field field-inline">
+                  <input
+                    type="checkbox"
+                    checked={denseStudents}
+                    onChange={(e) => setDenseStudents(e.target.checked)}
+                  />
+                  <div>
+                    <span>Dense student selection</span>
+                    <small>Select top students by density per cluster (hybrid approach).</small>
+                  </div>
+                </label>
+                {denseStudents && (
+                  <label className="field">
+                    <span>Target density</span>
+                    <input
+                      type="number"
+                      min="0.1"
+                      max="1.0"
+                      step="0.05"
+                      value={targetDensity}
+                      onChange={(e) => setTargetDensity(parseFloat(e.target.value))}
+                    />
+                    <small>Minimum density threshold for student selection (0.1-1.0).</small>
+                  </label>
+                )}
               </>
             )}
           </div>

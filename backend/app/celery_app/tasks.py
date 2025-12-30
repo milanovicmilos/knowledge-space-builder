@@ -104,6 +104,12 @@ def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
             # Max item clusters
             if 'max_item_clusters' in parameters and parameters['max_item_clusters'] is not None:
                 cmd.extend(['--max-item-clusters', str(parameters['max_item_clusters'])])
+            
+            # Dense student selection (NEW)
+            if parameters.get('dense_students', False):
+                cmd.append('--dense-students')
+                if 'target_density' in parameters:
+                    cmd.extend(['--target-density', str(parameters['target_density'])])
         
         # NEAT specific options
         if parameters.get('greedy', False):
