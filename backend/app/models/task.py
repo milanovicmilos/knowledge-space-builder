@@ -14,7 +14,7 @@ class Task(Base):
     celery_task_id = Column(String(255), unique=True)
     parameters = Column(JSONB, nullable=False)
     progress_percent = Column(Integer, default=0)
-    current_generation = Column(Integer)
+    current_epoch = Column(Integer)  # Changed from current_generation
     progress_details = Column(JSONB)  # Real-time progress info
     error_message = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

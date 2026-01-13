@@ -45,7 +45,7 @@ services:
       - CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost
     volumes:
       - ./backend/app:/app/app
-      - ./learning-space-generator:/app/learning-space-generator:ro
+      - ./learning_space_generator:/app/learning_space_generator:ro
       - storage_data:/app/storage
     depends_on:
       postgres:
@@ -66,7 +66,7 @@ services:
       - STORAGE_PATH=/app/storage
     volumes:
       - ./backend/app:/app/app
-      - ./learning-space-generator:/app/learning-space-generator:ro
+      - ./learning_space_generator:/app/learning_space_generator:ro
       - storage_data:/app/storage
     depends_on:
       postgres:

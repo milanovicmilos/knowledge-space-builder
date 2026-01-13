@@ -9,7 +9,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Learning Space Generator API",
-    description="API for generating learning spaces using NEAT and IITA algorithms",
+    description="API for generating knowledge spaces using MIRT-VAE algorithm",
     version="1.0.0"
 )
 

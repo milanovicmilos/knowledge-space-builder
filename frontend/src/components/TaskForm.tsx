@@ -10,27 +10,20 @@ interface TaskFormProps {
 }
 
 export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
-  // Item clustering options
-  const [cluster, setCluster] = useState(true);
-  const [rowCoverageThresh, setRowCoverageThresh] = useState(0.1);
-  const [minPairs, setMinPairs] = useState(500);
-  const [maxItemClusters, setMaxItemClusters] = useState<number | null>(null);
-  const [denseStudents, setDenseStudents] = useState(false);
-  const [targetDensity, setTargetDensity] = useState(0.9);
+  // MIRT-VAE Training options
+  const [epochs, setEpochs] = useState(8);
+  const [latentDim, setLatentDim] = useState(10);
+  const [device, setDevice] = useState('cpu');
   
-  // NEAT options
-  const [generations, setGenerations] = useState(50);
-  const [patience, setPatience] = useState(20);
-  const [parallel, setParallel] = useState(true);
-  const [greedy, setGreedy] = useState(false);
-  const [plot, setPlot] = useState(false);
+  // Prerequisite graph options
+  const [predThreshold, setPredThreshold] = useState(0.6);
+  const [implicationThreshold, setImplicationThreshold] = useState(0.85);
+  const [minKnown, setMinKnown] = useState(5);
   
-  // Missing value handling
-  const [missingMatchReward, setMissingMatchReward] = useState(0.5);
-  const [missingMismatchPenalty, setMissingMismatchPenalty] = useState(1.0);
-  
-  // Data options
-  const [randomizeItems, setRandomizeItems] = useState(false);
+  // Lattice construction options
+  const [selectK, setSelectK] = useState(30);
+  const [minSupport, setMinSupport] = useState(7);
+  const [forceK, setForceK] = useState(false);
   
   // Output options
   const [generatePng, setGeneratePng] = useState(true);
@@ -46,20 +39,15 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
 
     try {
       const parameters: TaskParameters = {
-        cluster,
-        row_coverage_thresh: rowCoverageThresh,
-        min_pairs: minPairs,
-        max_item_clusters: maxItemClusters,
-        dense_students: denseStudents,
-        target_density: targetDensity,
-        generations,
-        patience,
-        parallel,
-        greedy,
-        plot,
-        missing_match_reward: missingMatchReward,
-        missing_mismatch_penalty: missingMismatchPenalty,
-        randomize_items: randomizeItems,
+        epochs,
+        latent_dim: latentDim,
+        device,
+        pred_threshold: predThreshold,
+        implication_threshold: implicationThreshold,
+        min_known: minKnown,
+        select_k: selectK,
+        min_support: minSupport,
+        force_k: forceK,
         generate_png: generatePng,
       };
 
@@ -77,8 +65,8 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
       <div className="panel-head">
         <div>
           <p className="kicker">Step 2 · Configuration</p>
-          <h3>Configure NEAT Algorithm</h3>
-          <p className="hint">Evolutionary algorithm with automatic item clustering for large datasets.</p>
+          <h3>Configure Learning Space Generator</h3>
+          <p className="hint">MIRT-VAE training + prerequisite inference + lattice construction.</p>
         </div>
         <div className="pill">
           {(() => {
@@ -94,157 +82,85 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
       <form className="task-form" onSubmit={handleSubmit}>
         <div className="section">
           <div className="section-title">
-            <p className="kicker">Item Clustering</p>
-            <h4>Automatic data partitioning</h4>
-            <p className="hint">Divides large datasets into optimal subsets for processing.</p>
+            <p className="kicker">Phase 1: MIRT-VAE Training</p>
+            <h4>Neural network training parameters</h4>
+            <p className="hint">Multidimensional Item Response Theory Variational Autoencoder</p>
           </div>
           <div className="field-grid">
-            <label className="field field-inline">
+            <label className="field">
+              <span>Training epochs</span>
               <input
-                type="checkbox"
-                checked={cluster}
-                onChange={(e) => setCluster(e.target.checked)}
+                type="number"
+                min="1"
+                max="50"
+                value={epochs}
+                onChange={(e) => setEpochs(parseInt(e.target.value))}
               />
-              <div>
-                <span>Enable clustering</span>
-                <small>Recommended for 50+ items.</small>
-              </div>
+              <small>Number of complete passes through the training data (recommended: 8-15).</small>
             </label>
 
-            {cluster && (
-              <>
-                <label className="field">
-                  <span>Row coverage threshold</span>
-                  <input
-                    type="number"
-                    min="0.01"
-                    max="1.0"
-                    step="0.01"
-                    value={rowCoverageThresh}
-                    onChange={(e) => setRowCoverageThresh(parseFloat(e.target.value))}
-                  />
-                  <small>Students with ≥this% answered items (sparse data: 0.05-0.15, dense: 0.8).</small>
-                </label>
-                <label className="field">
-                  <span>Minimum pairs per cluster</span>
-                  <input
-                    type="number"
-                    min="100"
-                    max="5000"
-                    step="50"
-                    value={minPairs}
-                    onChange={(e) => setMinPairs(parseInt(e.target.value))}
-                  />
-                  <small>Minimum item-pair combinations required.</small>
-                </label>
-                <label className="field">
-                  <span>Max item clusters (optional)</span>
-                  <input
-                    type="number"
-                    min="2"
-                    max="20"
-                    value={maxItemClusters ?? ''}
-                    placeholder="Auto"
-                    onChange={(e) => setMaxItemClusters(e.target.value ? parseInt(e.target.value) : null)}
-                  />
-                  <small>Leave empty for automatic selection.</small>
-                </label>
-                <label className="field field-inline">
-                  <input
-                    type="checkbox"
-                    checked={denseStudents}
-                    onChange={(e) => setDenseStudents(e.target.checked)}
-                  />
-                  <div>
-                    <span>Dense student selection</span>
-                    <small>Select top students by density per cluster (hybrid approach).</small>
-                  </div>
-                </label>
-                {denseStudents && (
-                  <label className="field">
-                    <span>Target density</span>
-                    <input
-                      type="number"
-                      min="0.1"
-                      max="1.0"
-                      step="0.05"
-                      value={targetDensity}
-                      onChange={(e) => setTargetDensity(parseFloat(e.target.value))}
-                    />
-                    <small>Minimum density threshold for student selection (0.1-1.0).</small>
-                  </label>
-                )}
-              </>
-            )}
+            <label className="field">
+              <span>Latent dimension</span>
+              <input
+                type="number"
+                min="2"
+                max="50"
+                value={latentDim}
+                onChange={(e) => setLatentDim(parseInt(e.target.value))}
+              />
+              <small>Size of the latent representation space (recommended: 10).</small>
+            </label>
+
+            <label className="field">
+              <span>Computation device</span>
+              <select value={device} onChange={(e) => setDevice(e.target.value)}>
+                <option value="cpu">CPU</option>
+                <option value="cuda">GPU (CUDA)</option>
+              </select>
+              <small>CPU is reliable; GPU requires CUDA support.</small>
+            </label>
           </div>
         </div>
 
         <div className="section">
           <div className="section-title">
-            <p className="kicker">NEAT parameters</p>
-            <h4>Evolution dynamics</h4>
+            <p className="kicker">Phase 2: Lattice Construction</p>
+            <h4>Knowledge space building parameters</h4>
           </div>
           <div className="field-grid">
-            <label className="field field-inline">
+            <label className="field">
+              <span>Select top K items</span>
               <input
-                type="checkbox"
-                checked={greedy}
-                onChange={(e) => setGreedy(e.target.checked)}
+                type="number"
+                min="5"
+                max="120"
+                value={selectK}
+                onChange={(e) => setSelectK(parseInt(e.target.value))}
               />
-              <div>
-                <span>Greedy mode</span>
-                <small>Stop at first valid solution.</small>
-              </div>
+              <small>Number of most important items to include in lattice (recommended: 30).</small>
             </label>
 
-            {!greedy && (
-              <>
-                <label className="field">
-                  <span>Generations (max)</span>
-                  <input
-                    type="number"
-                    min="10"
-                    max="500"
-                    value={generations}
-                    onChange={(e) => setGenerations(parseInt(e.target.value))}
-                  />
-                  <small>Number of evolution iterations.</small>
-                </label>
-                <label className="field">
-                  <span>Patience</span>
-                  <input
-                    type="number"
-                    min="5"
-                    max="100"
-                    value={patience}
-                    onChange={(e) => setPatience(parseInt(e.target.value))}
-                  />
-                  <small>Early stop if no improvement.</small>
-                </label>
-              </>
-            )}
-
-            <label className="field field-inline">
+            <label className="field">
+              <span>Minimum support</span>
               <input
-                type="checkbox"
-                checked={parallel}
-                onChange={(e) => setParallel(e.target.checked)}
+                type="number"
+                min="1"
+                max="50"
+                value={minSupport}
+                onChange={(e) => setMinSupport(parseInt(e.target.value))}
               />
-              <div>
-                <span>Parallel processing</span>
-                <small>Better multi-core CPU utilization.</small>
-              </div>
+              <small>Minimum student count for a state to be included (5-10 for sparse data).</small>
             </label>
 
             <label className="field field-inline">
               <input
                 type="checkbox"
-                checked={plot}
-                onChange={(e) => setPlot(e.target.checked)}
+                checked={forceK}
+                onChange={(e) => setForceK(e.target.checked)}
               />
               <div>
-                <span>Show graph during evolution</span>
-                <small>Visual feedback during execution.</small>
+                <span>Force K selection</span>
+                <small>Disable safety reduction (may cause memory issues for large K).</small>
               </div>
             </label>
           </div>
@@ -254,48 +170,48 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
           <div className="section-title advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
             <div>
               <p className="kicker">Advanced options</p>
-              <h4>Missing values & output control</h4>
+              <h4>Prerequisite graph & thresholds</h4>
             </div>
             <span className="toggle">{showAdvanced ? 'Hide' : 'Show'}</span>
           </div>
           {showAdvanced && (
             <div className="field-grid">
               <label className="field">
-                <span>Missing match reward</span>
+                <span>Prediction threshold</span>
                 <input
                   type="number"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  value={missingMatchReward}
-                  onChange={(e) => setMissingMatchReward(parseFloat(e.target.value))}
+                  min="0.1"
+                  max="1.0"
+                  step="0.05"
+                  value={predThreshold}
+                  onChange={(e) => setPredThreshold(parseFloat(e.target.value))}
                 />
-                <small>Reward when both values are missing (0.5).</small>
+                <small>Threshold for binarizing predictions (0.5-0.7 recommended).</small>
               </label>
 
               <label className="field">
-                <span>Missing mismatch penalty</span>
+                <span>Implication threshold</span>
                 <input
                   type="number"
-                  min="0"
-                  max="5"
-                  step="0.1"
-                  value={missingMismatchPenalty}
-                  onChange={(e) => setMissingMismatchPenalty(parseFloat(e.target.value))}
+                  min="0.5"
+                  max="1.0"
+                  step="0.05"
+                  value={implicationThreshold}
+                  onChange={(e) => setImplicationThreshold(parseFloat(e.target.value))}
                 />
-                <small>Penalty when one value is missing (1.0).</small>
+                <small>Threshold for prerequisite relations (0.8-0.9 recommended).</small>
               </label>
 
-              <label className="field field-inline">
+              <label className="field">
+                <span>Minimum known students</span>
                 <input
-                  type="checkbox"
-                  checked={randomizeItems}
-                  onChange={(e) => setRandomizeItems(e.target.checked)}
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={minKnown}
+                  onChange={(e) => setMinKnown(parseInt(e.target.value))}
                 />
-                <div>
-                  <span>Randomize items</span>
-                  <small>Random column selection on each run.</small>
-                </div>
+                <small>Minimum students who must know item B for prerequisite (5-10 for sparse data).</small>
               </label>
 
               <label className="field field-inline">

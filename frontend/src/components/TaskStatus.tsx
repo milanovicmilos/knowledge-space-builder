@@ -84,10 +84,14 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
     switch (details.stage) {
       case 'initializing':
         return 'Preparing environment...';
-      case 'clustering':
-        return `Item clustering: K=${details.cluster_k} (silhouette: ${details.silhouette_score?.toFixed(3)})`;
-      case 'evolution':
-        return `Generation ${details.generation}${details.max_generation ? `/${details.max_generation}` : ''} - Fitness: ${details.current_fitness?.toFixed(4)}`;
+      case 'training':
+        return `Training: Epoch ${details.epoch}${details.max_epochs ? `/${details.max_epochs}` : ''} - Loss: ${details.current_loss?.toFixed(4)}`;
+      case 'building_prerequisites':
+        return 'Building prerequisite graph...';
+      case 'building_lattice':
+        return `Building lattice: ${details.num_states} states from ${details.total_unique} unique`;
+      case 'analyzing':
+        return 'Analyzing knowledge space...';
       case 'completed':
         return 'Analysis completed!';
       default:
@@ -124,25 +128,25 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
           <div className="live-panel">
             <div>
               <p className="live-title">{getProgressStageText()}</p>
-              <p className="hint">Real-time iteration and fitness tracking.</p>
+              <p className="hint">Real-time training progress and loss tracking.</p>
             </div>
             <div className="metric-grid">
-              {task.progress_details?.generation && (
+              {task.progress_details?.epoch && (
                 <div className="metric">
-                  <p className="label">Generation</p>
-                  <strong>{task.progress_details.generation}</strong>
+                  <p className="label">Epoch</p>
+                  <strong>{task.progress_details.epoch}</strong>
                 </div>
               )}
-              {task.progress_details?.current_fitness && (
+              {task.progress_details?.current_loss && (
                 <div className="metric">
-                  <p className="label">Current fitness</p>
-                  <strong>{task.progress_details.current_fitness.toFixed(4)}</strong>
+                  <p className="label">Current loss</p>
+                  <strong>{task.progress_details.current_loss.toFixed(4)}</strong>
                 </div>
               )}
-              {task.progress_details?.cluster_k && (
+              {task.progress_details?.num_states && (
                 <div className="metric">
-                  <p className="label">Clusters</p>
-                  <strong>{task.progress_details.cluster_k}</strong>
+                  <p className="label">States</p>
+                  <strong>{task.progress_details.num_states}</strong>
                 </div>
               )}
             </div>
@@ -217,7 +221,7 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
             )}
             {result.final_generation && (
               <div className="metric card">
-                <p className="label">Final generation</p>
+                <p className="label">Final epoch</p>
                 <strong>{result.final_generation}</strong>
               </div>
             )}

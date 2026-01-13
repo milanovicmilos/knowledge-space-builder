@@ -10,31 +10,23 @@ export interface Upload {
 }
 
 export interface TaskParameters {
-  // Item clustering options (NEW)
-  cluster: boolean;
-  row_coverage_thresh: number;
-  min_pairs: number;
-  max_item_clusters?: number | null;
-  dense_students: boolean;
-  target_density: number;
+  // MIRT-VAE Training options
+  epochs: number;
+  latent_dim: number;
+  device: string;
   
-  // NEAT options
-  generations: number;
-  patience: number;
-  parallel: boolean;
-  greedy: boolean;
-  plot: boolean;
+  // Prerequisite graph options
+  pred_threshold: number;
+  implication_threshold: number;
+  min_known: number;
   
-  // Missing value handling
-  missing_match_reward: number;
-  missing_mismatch_penalty: number;
-  
-  // Data options
-  randomize_items: boolean;
+  // Lattice construction options
+  select_k: number;
+  min_support: number;
+  force_k: boolean;
   
   // Output options
   generate_png: boolean;
-  png_filename?: string | null;
 }
 
 export interface Task {
@@ -44,14 +36,14 @@ export interface Task {
   celery_task_id: string | null;
   parameters: TaskParameters;
   progress_percent: number;
-  current_generation: number | null;
+  current_epoch: number | null;  // Changed from current_generation
   progress_details: {
     stage?: string;
-    current_fitness?: number;
-    generation?: number;
-    max_generation?: number;
-    cluster_k?: number;
-    silhouette_score?: number;
+    current_loss?: number;  // Changed from current_fitness
+    epoch?: number;  // Changed from generation
+    max_epochs?: number;  // Changed from max_generation
+    num_states?: number;
+    total_unique?: number;
     eta_seconds?: number;
   } | null;
   error_message: string | null;

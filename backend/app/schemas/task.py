@@ -4,29 +4,23 @@ from typing import Dict, Any
 
 
 class TaskParameters(BaseModel):
-    # Item clustering options (NEW)
-    cluster: bool = True  # Enable item clustering (always recommended)
-    row_coverage_thresh: float = 0.8  # Minimum row coverage per cluster
-    min_pairs: int = 500  # Minimum item pairs per cluster
-    max_item_clusters: int | None = None  # Max clusters (auto if None)
+    # MIRT-VAE Training options
+    epochs: int = 8  # Number of training epochs
+    latent_dim: int = 10  # Latent dimension size
+    device: str = 'cpu'  # 'cpu' or 'cuda'
     
-    # NEAT options
-    generations: int = 50
-    patience: int = 20
-    parallel: bool = True
-    greedy: bool = False  # Run until first valid solution
-    plot: bool = False  # Show graph during evolution
+    # Prerequisite graph options
+    pred_threshold: float = 0.6  # Prediction threshold for binarization
+    implication_threshold: float = 0.85  # Threshold for prerequisite relations
+    min_known: int = 5  # Minimum students who know item B
     
-    # Missing value handling
-    missing_match_reward: float = 0.5  # Reward for matching missing values
-    missing_mismatch_penalty: float = 1.0  # Penalty for mismatched missing
-    
-    # Data options
-    randomize_items: bool = False
+    # Lattice construction options
+    select_k: int = 30  # Number of top items to select
+    min_support: int = 7  # Minimum support for empirical states
+    force_k: bool = False  # Force k without safety reduction
     
     # Output options
     generate_png: bool = True  # Generate PNG visualization
-    png_filename: str | None = None
 
 
 class TaskCreate(BaseModel):
@@ -41,7 +35,7 @@ class TaskResponse(BaseModel):
     celery_task_id: str | None
     parameters: Dict[str, Any]
     progress_percent: int
-    current_generation: int | None
+    current_epoch: int | None  # Changed from current_generation
     progress_details: Dict[str, Any] | None
     error_message: str | None
     created_at: datetime

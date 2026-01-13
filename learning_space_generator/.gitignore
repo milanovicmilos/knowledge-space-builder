@@ -1,6 +1,8 @@
-# Output directories - do not commit
+# Output directories
 output/
-data/ResponsePatterns_Stellwerk_Math_2018-2024(in).csv
+
+# Data files
+data/*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
