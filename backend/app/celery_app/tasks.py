@@ -4,11 +4,12 @@ import time
 import json
 import re
 import subprocess
+import tempfile
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-# Add learning-space-generator to path
-sys.path.insert(0, '/app/learning-space-generator')
+# Add learning_space_generator to path
+sys.path.insert(0, '/app/learning_space_generator')
 
 from sqlalchemy.sql import func
 from app.celery_app import celery_app
@@ -20,44 +21,46 @@ from app.services.storage import storage_service
 
 
 def parse_progress_line(line: str) -> Optional[Dict[str, Any]]:
-    """Parse progress info from NEAT algorithm stdout"""
+    """Parse progress info from MIRT-VAE training and lattice construction"""
     progress = {}
     
-    # NEAT progress: "Generation 42/100: Best fitness = 0.85, Current = 0.78"
-    neat_match = re.search(r'Generation\s+(\d+)(?:/(\d+))?.*fitness.*?=\s*([\d.]+)', line, re.IGNORECASE)
-    if neat_match:
-        current_gen = int(neat_match.group(1))
-        max_gen = int(neat_match.group(2)) if neat_match.group(2) else None
-        fitness = float(neat_match.group(3))
+    # MIRT-VAE training: "INFO:...model_trainer:Epoch 3/8 loss=0.1555 time=4.2s"
+    epoch_match = re.search(r'Epoch\s+(\d+)/(\d+).*loss=([\d.]+)', line, re.IGNORECASE)
+    if epoch_match:
+        current_epoch = int(epoch_match.group(1))
+        max_epochs = int(epoch_match.group(2))
+        loss = float(epoch_match.group(3))
         
-        progress['generation'] = current_gen
-        if max_gen:
-            progress['max_generation'] = max_gen
-            progress['progress_percent'] = int((current_gen / max_gen) * 100)
-        progress['current_fitness'] = fitness
-        progress['stage'] = 'evolution'
+        progress['epoch'] = current_epoch
+        progress['max_epochs'] = max_epochs
+        progress['progress_percent'] = int((current_epoch / max_epochs) * 50)  # Training is 50% of work
+        progress['current_loss'] = loss
+        progress['stage'] = 'training'
         return progress
     
-    # Item clustering progress: "K=3: silhouette=0.134" or "Analyzing K=3"
-    cluster_match = re.search(r'K=(\d+).*silhouette.*?=\s*([\d.-]+)', line, re.IGNORECASE)
-    if cluster_match:
-        k = int(cluster_match.group(1))
-        silhouette = float(cluster_match.group(2))
-        progress['cluster_k'] = k
-        progress['silhouette_score'] = silhouette
-        progress['progress_percent'] = 10
-        progress['stage'] = 'clustering'
+    # Prerequisite graph building: "INFO:...prerequisite_builder:Saved prerequisite JSON"
+    prereq_match = re.search(r'prerequisite.*JSON', line, re.IGNORECASE)
+    if prereq_match:
+        progress['progress_percent'] = 55
+        progress['stage'] = 'building_prerequisites'
         return progress
     
-    # Cluster processing: "--- Cluster 0: rows_kept=113"
-    cluster_proc_match = re.search(r'Cluster\s+(\d+).*rows_kept=(\d+)', line, re.IGNORECASE)
-    if cluster_proc_match:
-        cluster_id = int(cluster_proc_match.group(1))
-        rows_kept = int(cluster_proc_match.group(2))
-        progress['current_cluster'] = cluster_id
-        progress['rows_kept'] = rows_kept
-        progress['progress_percent'] = 20 + (cluster_id * 10)  # Increment per cluster
-        progress['stage'] = 'processing_cluster'
+    # Empirical lattice: "INFO:...orchestrator:Empirical: 3966 frequent states from 117087 unique"
+    lattice_match = re.search(r'Empirical:\s+(\d+)\s+frequent\s+states\s+from\s+(\d+)', line, re.IGNORECASE)
+    if lattice_match:
+        num_states = int(lattice_match.group(1))
+        total_unique = int(lattice_match.group(2))
+        progress['num_states'] = num_states
+        progress['total_unique'] = total_unique
+        progress['progress_percent'] = 70
+        progress['stage'] = 'building_lattice'
+        return progress
+    
+    # Lattice analysis: "INFO:...analyzer:Lattice analysis summary"
+    analysis_match = re.search(r'Lattice analysis summary', line, re.IGNORECASE)
+    if analysis_match:
+        progress['progress_percent'] = 90
+        progress['stage'] = 'analyzing'
         return progress
     
     return None
@@ -65,7 +68,7 @@ def parse_progress_line(line: str) -> Optional[Dict[str, Any]]:
 
 @celery_app.task(bind=True)
 def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
-    """Execute NEAT algorithm with item clustering and real-time progress tracking"""
+    """Execute MIRT-VAE training + prerequisite graph + lattice construction with real-time progress"""
     db = SessionLocal()
     
     try:
@@ -82,155 +85,153 @@ def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
         
         start_time = time.time()
         
-        # Build command with all parameters
-        import tempfile
-        output_json = tempfile.mktemp(suffix='.json')
-        png_output = tempfile.mktemp(suffix='.png') if parameters.get('generate_png', True) else None
+        # Create temporary output directory
+        output_dir = tempfile.mkdtemp(prefix='lsg_output_')
         
-        cmd = [sys.executable, '-m', 'lsg.run', '--data-path', csv_path]
+        # ============ PHASE 1: Training ============
+        train_cmd = [
+            sys.executable, '-m', 'learning_space_generator.cli.main', 'train',
+            '--csv', csv_path,
+            '--out', output_dir,
+            '--epochs', str(parameters.get('epochs', 8)),
+            '--latent', str(parameters.get('latent_dim', 10)),
+            '--device', parameters.get('device', 'cpu')
+        ]
         
-        # Item clustering (NEW: always enabled, no more --use-iita)
-        if parameters.get('cluster', True):
-            cmd.append('--cluster')
-            
-            # Row coverage threshold
-            if 'row_coverage_thresh' in parameters:
-                cmd.extend(['--row-coverage-thresh', str(parameters['row_coverage_thresh'])])
-            
-            # Minimum pairs per item
-            if 'min_pairs' in parameters:
-                cmd.extend(['--min-pairs', str(parameters['min_pairs'])])
-            
-            # Max item clusters
-            if 'max_item_clusters' in parameters and parameters['max_item_clusters'] is not None:
-                cmd.extend(['--max-item-clusters', str(parameters['max_item_clusters'])])
-            
-            # Dense student selection (NEW)
-            if parameters.get('dense_students', False):
-                cmd.append('--dense-students')
-                if 'target_density' in parameters:
-                    cmd.extend(['--target-density', str(parameters['target_density'])])
+        task.progress_details = {'stage': 'training', 'phase': 1}
+        db.commit()
         
-        # NEAT specific options
-        if parameters.get('greedy', False):
-            cmd.append('--greedy')
-        else:
-            cmd.extend(['--generations', str(parameters.get('generations', 50))])
-            cmd.extend(['--patience', str(parameters.get('patience', 20))])
-        
-        if parameters.get('parallel', True):
-            cmd.append('--parallel')
-        
-        if parameters.get('plot', False):
-            cmd.append('--plot')
-        
-        # Missing value handling
-        if 'missing_match_reward' in parameters:
-            cmd.extend(['--missing-match-reward', str(parameters['missing_match_reward'])])
-        if 'missing_mismatch_penalty' in parameters:
-            cmd.extend(['--missing-mismatch-penalty', str(parameters['missing_mismatch_penalty'])])
-        
-        # Data options
-        if parameters.get('randomize_items', False):
-            cmd.append('--randomize-items')
-        
-        # Output options
-        cmd.extend(['--json', output_json])
-        if png_output:
-            cmd.extend(['--png', png_output])
-        
-        # Run process with real-time output capture
-        cwd = '/app/learning-space-generator'
+        # Run training with real-time output
         process = subprocess.Popen(
-            cmd,
-            cwd=cwd,
+            train_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1
         )
         
-        # Read output line by line
         output_lines = []
         for line in iter(process.stdout.readline, ''):
             if not line:
                 break
-            
             output_lines.append(line)
             
             # Parse progress
             progress_info = parse_progress_line(line)
             if progress_info:
-                # Update task with progress
                 task.progress_percent = progress_info.get('progress_percent', task.progress_percent)
-                task.current_generation = progress_info.get('generation')
+                task.current_epoch = progress_info.get('epoch')
                 task.progress_details = progress_info
                 db.commit()
                 
-                # Update Celery task state for real-time tracking
-                self.update_state(
-                    state='PROGRESS',
-                    meta=progress_info
-                )
+                self.update_state(state='PROGRESS', meta=progress_info)
         
         process.wait()
-        
         if process.returncode != 0:
-            full_output = ''.join(output_lines)
-            raise Exception(f"NEAT algorithm failed with exit code {process.returncode}:\n{full_output}")
+            raise Exception(f"Training failed: {''.join(output_lines[-20:])}")
         
-        # Read result JSON
-        with open(output_json, 'r') as f:
-            result_data = json.load(f)
+        # ============ PHASE 2: Build Lattice ============
+        pred_probs_path = os.path.join(output_dir, 'pred_probs.npy')
+        item_cols_path = os.path.join(output_dir, 'item_cols.npy')
         
-        # Save JSON to storage
-        with open(output_json, 'r') as f:
-            result_content = f.read()
+        build_cmd = [
+            sys.executable, '-m', 'learning_space_generator.cli.main', 'build',
+            '--pred', pred_probs_path,
+            '--item_cols', item_cols_path,
+            '--out', output_dir,
+            '--select_k', str(parameters.get('select_k', 30)),
+            '--min_support', str(parameters.get('min_support', 7)),
+            '--pred_threshold', str(parameters.get('pred_threshold', 0.6)),
+            '--implication_threshold', str(parameters.get('implication_threshold', 0.85)),
+            '--min_known', str(parameters.get('min_known', 5))
+        ]
         
-        json_storage_key = storage_service.save_result(
-            result_content,
-            task_id,
-            'learning_space.json'
+        if parameters.get('force_k', False):
+            build_cmd.append('--force_k')
+        
+        task.progress_details = {'stage': 'building_lattice', 'phase': 2}
+        task.progress_percent = 50
+        db.commit()
+        
+        # Run build with real-time output
+        process = subprocess.Popen(
+            build_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
         )
         
-        # Save PNG if generated
+        for line in iter(process.stdout.readline, ''):
+            if not line:
+                break
+            output_lines.append(line)
+            
+            progress_info = parse_progress_line(line)
+            if progress_info:
+                task.progress_percent = progress_info.get('progress_percent', task.progress_percent)
+                task.progress_details = progress_info
+                db.commit()
+                
+                self.update_state(state='PROGRESS', meta=progress_info)
+        
+        process.wait()
+        if process.returncode != 0:
+            raise Exception(f"Lattice construction failed: {''.join(output_lines[-20:])}")
+        
+        # ============ Collect Results ============
+        lattice_json_path = os.path.join(output_dir, f'knowledge_space_lattice_k{parameters.get("select_k", 30)}.json')
+        summary_json_path = os.path.join(output_dir, f'knowledge_space_k{parameters.get("select_k", 30)}_summary.json')
+        lattice_png_path = os.path.join(output_dir, f'knowledge_space_lattice_k{parameters.get("select_k", 30)}.png')
+        
+        # Read lattice JSON
+        with open(lattice_json_path, 'r', encoding='utf-8') as f:
+            lattice_data = json.load(f)
+        
+        # Read summary
+        with open(summary_json_path, 'r', encoding='utf-8') as f:
+            summary_data = json.load(f)
+        
+        # Save lattice JSON to storage
+        with open(lattice_json_path, 'r', encoding='utf-8') as f:
+            json_content = f.read()
+        json_storage_key = storage_service.save_result(
+            json_content,
+            task_id,
+            'knowledge_space_lattice.json'
+        )
+        
+        # Save PNG if exists
         png_storage_key = None
-        if png_output and os.path.exists(png_output):
-            with open(png_output, 'rb') as f:
+        if os.path.exists(lattice_png_path):
+            with open(lattice_png_path, 'rb') as f:
                 png_content = f.read()
             png_storage_key = storage_service.save_result(
                 png_content,
                 task_id,
-                'learning_space.png'
+                'knowledge_space_lattice.png'
             )
-            os.unlink(png_output)
         
-        # Parse NEAT metadata (handle structured output from clustered mode)
-        if 'merged_learning_space' in result_data:
-            # NEW: Structured output from clustered mode
-            learning_space = result_data['merged_learning_space']
-            num_states = len(learning_space) if isinstance(learning_space, dict) else 0
-            num_edges = sum(len(v) for v in learning_space.values()) if isinstance(learning_space, dict) else 0
-        else:
-            # OLD: Direct learning space output (non-clustered mode)
-            num_states = len(result_data) if isinstance(result_data, dict) else 0
-            num_edges = sum(len(v) for v in result_data.values()) if isinstance(result_data, dict) else 0
-        
+        # Create result record
         db_result = Result(
             task_id=task_id,
             graph_storage_key=json_storage_key,
-            num_states=num_states,
-            num_edges=num_edges,
+            num_states=summary_data.get('num_states', 0),
+            num_edges=summary_data.get('num_edges', 0),
             num_relations=None,
             discrepancy=None,
-            is_valid=True,
-            algorithm='neat',
-            final_generation=task.current_generation,
+            is_valid=summary_data.get('is_dag', True),
+            algorithm='mirt-vae+lattice',
+            final_generation=task.current_epoch,
             execution_time_seconds=int(time.time() - start_time),
-            result_metadata={'png_key': png_storage_key}
+            result_metadata={
+                'png_key': png_storage_key,
+                'summary': summary_data,
+                'longest_path': summary_data.get('longest_path'),
+                'weak_components': summary_data.get('weak_components')
+            }
         )
         
-        os.unlink(output_json)
         db.add(db_result)
         
         # Update task
@@ -239,6 +240,10 @@ def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
         task.progress_percent = 100
         task.progress_details = {'stage': 'completed', 'result_id': db_result.id}
         db.commit()
+        
+        # Cleanup temp directory
+        import shutil
+        shutil.rmtree(output_dir, ignore_errors=True)
         
         return {"result_id": db_result.id, "png_available": png_storage_key is not None}
         

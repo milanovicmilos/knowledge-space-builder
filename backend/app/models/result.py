@@ -12,11 +12,6 @@ class Result(Base):
     graph_storage_key = Column(String(500), nullable=False)
     num_states = Column(Integer)
     num_edges = Column(Integer)
-    num_relations = Column(Integer)  # For IITA
-    discrepancy = Column(Float)  # For NEAT
-    is_valid = Column(Boolean)  # For NEAT
-    algorithm = Column(String(20), nullable=False)  # 'neat' or 'iita'
-    final_generation = Column(Integer)
     execution_time_seconds = Column(Integer)
     result_metadata = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

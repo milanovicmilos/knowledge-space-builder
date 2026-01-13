@@ -1,0 +1,44 @@
+{
+  "{}": [
+    "{a}"
+  ],
+  "{a}": [
+    "{a, i}"
+  ],
+  "{a, i}": [
+    "{a, b, i}"
+  ],
+  "{a, b, i}": [
+    "{a, b, d, i}"
+  ],
+  "{a, b, d, i}": [
+    "{a, b, d, g, i}"
+  ],
+  "{a, b, d, g, i}": [
+    "{a, b, d, e, g, i}"
+  ],
+  "{a, b, d, e, g, i}": [
+    "{a, b, c, d, e, g, i}",
+    "{a, b, d, e, f, g, i}"
+  ],
+  "{a, b, c, d, e, g, i}": [
+    "{a, b, c, d, e, f, g, i}",
+    "{a, b, c, d, e, g, h, i}"
+  ],
+  "{a, b, d, e, f, g, i}": [
+    "{a, b, c, d, e, f, g, i}"
+  ],
+  "{a, b, c, d, e, f, g, i}": [
+    "{a, b, c, d, e, f, g, h, i}",
+    "{a, b, c, d, e, f, g, i, j}"
+  ],
+  "{a, b, c, d, e, g, h, i}": [
+    "{a, b, c, d, e, f, g, h, i}"
+  ],
+  "{a, b, c, d, e, f, g, h, i}": [
+    "{a, b, c, d, e, f, g, h, i, j}"
+  ],
+  "{a, b, c, d, e, f, g, i, j}": [
+    "{a, b, c, d, e, f, g, h, i, j}"
+  ]
+}
