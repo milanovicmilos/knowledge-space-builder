@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FiZap } from 'react-icons/fi';
+import { FiZap, FiSettings } from 'react-icons/fi';
 import { createTask } from '../api/client';
 import type { Upload, TaskParameters } from '../types/api';
 import './TaskForm.css';
@@ -10,9 +10,13 @@ interface TaskFormProps {
 }
 
 export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
-  // MIRT-VAE Training options
-  const [epochs, setEpochs] = useState(8);
-  const [latentDim, setLatentDim] = useState(10);
+  // Mode selection
+  const [mode, setMode] = useState<'optimize' | 'manual'>('optimize');
+  const [nTrials, setNTrials] = useState(10);
+
+  // Manual parameters
+  const [epochs, setEpochs] = useState(100);
+  const [latentDim, setLatentDim] = useState(5);
   const [device, setDevice] = useState('cpu');
   
   // Prerequisite graph options
@@ -21,8 +25,8 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
   const [minKnown, setMinKnown] = useState(5);
   
   // Lattice construction options
-  const [selectK, setSelectK] = useState(30);
-  const [minSupport, setMinSupport] = useState(7);
+  const [selectK, setSelectK] = useState(5);
+  const [minSupport, setMinSupport] = useState(3);
   const [forceK, setForceK] = useState(false);
   
   // Output options
@@ -38,18 +42,28 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
     setError(null);
 
     try {
-      const parameters: TaskParameters = {
-        epochs,
-        latent_dim: latentDim,
-        device,
-        pred_threshold: predThreshold,
-        implication_threshold: implicationThreshold,
-        min_known: minKnown,
-        select_k: selectK,
-        min_support: minSupport,
-        force_k: forceK,
-        generate_png: generatePng,
-      };
+      let parameters: TaskParameters;
+      
+      if (mode === 'optimize') {
+        parameters = { 
+            mode: 'optimize', 
+            n_trials: nTrials 
+        };
+      } else {
+        parameters = {
+            mode: 'manual',
+            epochs,
+            latent_dim: latentDim,
+            device,
+            pred_threshold: predThreshold,
+            implication_threshold: implicationThreshold,
+            min_known: minKnown,
+            select_k: selectK,
+            min_support: minSupport,
+            force_k: forceK,
+            generate_png: generatePng,
+        };
+      }
 
       const task = await createTask(upload.id, parameters);
       onTaskCreated?.(task.id);
@@ -66,7 +80,11 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
         <div>
           <p className="kicker">Step 2 · Configuration</p>
           <h3>Configure Learning Space Generator</h3>
-          <p className="hint">MIRT-VAE training + prerequisite inference + lattice construction.</p>
+          <p className="hint">
+            {mode === 'optimize' 
+              ? 'Automated hyperparameter optimization and lattice construction.' 
+              : 'Manual configuration of MIRT-VAE and Lattice parameters.'}
+          </p>
         </div>
         <div className="pill">
           {(() => {
@@ -79,7 +97,51 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
         </div>
       </div>
 
+      <div className="mode-switch">
+        <button 
+            type="button" 
+            className={mode === 'optimize' ? 'active' : ''} 
+            onClick={() => setMode('optimize')}
+        >
+            <FiZap /> Optimized Run
+        </button>
+        <button 
+            type="button" 
+            className={mode === 'manual' ? 'active' : ''} 
+            onClick={() => setMode('manual')}
+        >
+            <FiSettings /> Manual Config
+        </button>
+      </div>
+
       <form className="task-form" onSubmit={handleSubmit}>
+        {mode === 'optimize' ? (
+            <div className="section">
+                <div className="section-title">
+                    <p className="kicker">Optimization Strategy</p>
+                    <h4>Hyperparameter Tuning</h4>
+                </div>
+                <div className="field-grid">
+                    <label className="field">
+                        <span>Search Trials</span>
+                        <input
+                            type="number"
+                            min="1"
+                            max="50"
+                            value={nTrials}
+                            onChange={(e) => setNTrials(parseInt(e.target.value))}
+                        />
+                        <small>Number of hyperparameter combinations to evaluate.</small>
+                    </label>
+                    <div className="info-box" style={{ padding: '1rem', background: 'rgba(57, 163, 108, 0.1)', borderRadius: '8px' }}>
+                        <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                            The system will automatically find the best latent dimension, training epochs, and thresholds to maximize reconstruction accuracy and lattice quality.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        ) : (
+            <>
         <div className="section">
           <div className="section-title">
             <p className="kicker">Phase 1: MIRT-VAE Training</p>
@@ -229,10 +291,13 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
           )}
         </div>
 
+            </>
+        )}
+
         <div className="form-actions">
           <button type="submit" disabled={creating} className="primary-btn">
             <FiZap size={16} style={{ marginRight: '0.5rem' }} />
-            {creating ? 'Launching...' : 'Launch analysis'}
+            {creating ? 'Running...' : (mode === 'optimize' ? 'Start Optimization' : 'Start Build')}
           </button>
         </div>
       </form>

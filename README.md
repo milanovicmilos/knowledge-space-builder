@@ -63,6 +63,25 @@ pip install -r requirements.txt
 python -m learning_space_generator.cli.main --help
 ```
 
+### Running Locally (CLI)
+
+For best results, use the optimization pipeline which automatically tunes hyperparameters:
+
+```bash
+# Activate virtual environment
+.venv\Scripts\activate
+
+# Run full optimization pipeline (Optimize -> Build -> Evaluate)
+python -m learning_space_generator.cli.optimize full \
+  --csv learning_space_generator/data/ResponsePatterns_Stellwerk_Math_2018-2024(in).csv \
+  --out_dir learning_space_generator/output \
+  --n_trials 3
+```
+
+- **Output**: `learning_space_generator/output/knowledge_space_lattice_k30.json`
+- **Visualization**: `learning_space_generator/output/knowledge_space_lattice_k30.png`
+- **Report**: `learning_space_generator/output/quality_report.json`
+
 ## Usage Workflow
 
 1. **Upload CSV**: Submit response pattern matrix (rows = students, columns = items)

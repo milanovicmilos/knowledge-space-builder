@@ -4,7 +4,11 @@ from typing import Dict, Any
 
 
 class TaskParameters(BaseModel):
-    # MIRT-VAE Training options
+    # Execution Mode
+    mode: str = 'optimize'  # 'optimize' (recommended) or 'manual'
+    n_trials: int = 3  # Number of optimization trials (only for optimize mode)
+
+    # MIRT-VAE Training options (Manual mode or override)
     epochs: int = 8  # Number of training epochs
     latent_dim: int = 10  # Latent dimension size
     device: str = 'cpu'  # 'cpu' or 'cuda'

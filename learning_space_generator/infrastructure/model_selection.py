@@ -13,6 +13,7 @@ from typing import Dict, Tuple, List, Optional, Any
 from dataclasses import dataclass
 import json
 import os
+from collections import deque
 
 logger = logging.getLogger(__name__)
 
@@ -20,20 +21,20 @@ logger = logging.getLogger(__name__)
 @dataclass
 class OptimizationParams:
     """Hyperparameter search space definition."""
-    latent_dim_range: Tuple[int, int] = (3, 25)
-    epochs_range: Tuple[int, int] = (5, 30)
+    latent_dim_range: Tuple[int, int] = (3, 15)
+    epochs_range: Tuple[int, int] = (50, 200)
     batch_size_options: List[int] = None
-    learning_rate_range: Tuple[float, float] = (1e-4, 1e-2)
+    learning_rate_range: Tuple[float, float] = (1e-4, 5e-3)
     pred_threshold_range: Tuple[float, float] = (0.5, 0.7)
-    implication_threshold_range: Tuple[float, float] = (0.70, 0.95)
+    implication_threshold_range: Tuple[float, float] = (0.75, 0.95)
     select_k_options: List[int] = None
-    min_support_range: Tuple[int, int] = (3, 50)
+    min_support_range: Tuple[int, int] = (1, 15)
     
     def __post_init__(self):
         if self.batch_size_options is None:
-            self.batch_size_options = [256, 512, 1024, 2048]
+            self.batch_size_options = [256, 512, 1024]
         if self.select_k_options is None:
-            self.select_k_options = [20, 30, 40, 50]
+            self.select_k_options = [10, 15, 20, 25, 30, 40, 50]
 
 
 @dataclass
@@ -59,6 +60,70 @@ class OptimizationMetrics:
     
     # Overall quality score
     overall_score: float  # weighted combination of metrics
+    num_connected_components: int = 1  # number of connected components in the graph
+    is_fully_connected: bool = True  # whether entire graph is connected
+
+
+class GraphConnectivityAnalyzer:
+    """Analyze connectivity and fragmentation of knowledge space graphs."""
+    
+    @staticmethod
+    def count_connected_components(graph: Dict[str, List[str]]) -> Tuple[int, int]:
+        """
+        Count number of connected components in the knowledge space graph.
+        
+        Returns:
+            (num_components, unreachable_from_empty)
+        """
+        if not graph:
+            return 0, 0
+        
+        # Build adjacency list (bidirectional for connectivity)
+        adj = {}
+        all_nodes = set()
+        
+        for state, successors in graph.items():
+            all_nodes.add(state)
+            if state not in adj:
+                adj[state] = []
+            for succ in successors:
+                all_nodes.add(succ)
+                adj[state].append(succ)
+                if succ not in adj:
+                    adj[succ] = []
+                if state not in adj[succ]:
+                    adj[succ].append(state)
+        
+        # Find connected components using BFS
+        visited = set()
+        components = []
+        
+        for node in all_nodes:
+            if node not in visited:
+                component = set()
+                queue = deque([node])
+                visited.add(node)
+                component.add(node)
+                
+                while queue:
+                    current = queue.popleft()
+                    for neighbor in adj.get(current, []):
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            component.add(neighbor)
+                            queue.append(neighbor)
+                
+                components.append(component)
+        
+        # Find empty state component
+        unreachable = 0
+        if "{}" in all_nodes:
+            for comp in components:
+                if "{}" in comp:
+                    unreachable = len(all_nodes) - len(comp)
+                    break
+        
+        return len(components), unreachable
 
 
 class EBOWMetricComputer:
@@ -137,6 +202,7 @@ class LatentDimensionSelector:
         for dim in range(*latent_dim_range):
             with tempfile.TemporaryDirectory() as tmpdir:
                 try:
+                    print(f'[PROGRESS] Testing latent_dim={dim}', flush=True)
                     # Train model with this latent_dim
                     train_mirt_vae(csv_path, tmpdir, epochs=epochs, latent_dim=dim)
                     
@@ -150,6 +216,7 @@ class LatentDimensionSelector:
                     results['latent_dims'].append(dim)
                     results['val_losses'].append(val_loss)
                     
+                    print(f'[PROGRESS] latent_dim={dim}: val_loss={val_loss:.4f}', flush=True)
                     if verbose:
                         logger.info('latent_dim=%d: val_loss=%.4f', dim, val_loss)
                 
@@ -282,6 +349,8 @@ class ModelEvaluator:
         try:
             # Phase 1: Train MIRT-VAE
             logger.info('Evaluating config: %s', config)
+            print(f'Testing config: latent_dim={config["latent_dim"]}, epochs={config["epochs"]}, '
+                  f'pred_threshold={config["pred_threshold"]:.2f}, select_k={config["select_k"]}', flush=True)
             
             train_mirt_vae(
                 csv_path, 
@@ -318,17 +387,61 @@ class ModelEvaluator:
             with open(summary_path) as f:
                 summary = json.load(f)
             
+            # Load the actual graph to check connectivity
+            graph_path = os.path.join(out_dir, f"knowledge_space_lattice_k{config['select_k']}.json")
+            graph = {}
+            if os.path.exists(graph_path):
+                with open(graph_path) as f:
+                    graph = json.load(f)
+            else:
+                # Try alternative naming
+                graph_path = os.path.join(out_dir, f"lattice_k{config['select_k']}.json")
+                if os.path.exists(graph_path):
+                    with open(graph_path) as f:
+                        graph = json.load(f)
+            
+            # Analyze graph connectivity
+            num_components, unreachable = GraphConnectivityAnalyzer.count_connected_components(graph)
+            
             # Calculate overall quality score
             num_states = summary.get('num_states', 0)
             num_edges = summary.get('num_edges', 0)
             orphan_pct = 100 * (summary.get('orphan_states', 0) / max(num_states, 1))
             
-            # Score: prefer balanced states, good connectivity, few orphans
+            # CRITICAL: Penalty for fragmented graphs AND for trivial graphs
+            # A fully connected graph (1 component) gets score 1.0
+            # Graph with 30 components gets heavily penalized
+            fragmentation_score = 1.0 / max(num_components, 1)  # 1.0 if 1 component, 0.033 if 30 components
+            
+            # NEW: STRONG penalty for graphs with too few states (trivial solutions)
+            # We want at least 10 states for meaningful knowledge space
+            # Use EXPONENTIAL penalty: 2^(states/10) to heavily discourage trivial graphs
+            # Examples: 1 state -> 2^0.1 = 0.07, 2 states -> 2^0.2 = 0.13, 5 states -> 2^0.5 = 0.41, 10 states -> 2^1.0 = 1.0
+            min_states_threshold = 10
+            if num_states < min_states_threshold:
+                state_count_penalty = 2 ** (num_states / min_states_threshold - 1)  # Exponential penalty
+            else:
+                state_count_penalty = 1.0
+            
+            # Score: prefer balanced states, good connectivity, few orphans, FULLY CONNECTED GRAPH, MEANINGFUL SIZE
             connectivity_score = min(num_edges / max(num_states, 1), 2.0) / 2.0  # normalized to 0-1
             orphan_score = 1.0 - min(orphan_pct / 100, 1.0)  # lower orphans = higher score
             loss_score = 1.0 / (1.0 + reconstruction_loss)  # lower loss = higher score
             
-            overall_score = 0.4 * loss_score + 0.4 * connectivity_score + 0.2 * orphan_score
+            # UPDATED SCORING WEIGHTS (v3):
+            # 40% state count (CRITICAL - must have meaningful number of states!)
+            # 25% fragmentation (must be connected!)
+            # 15% connectivity (edges per state ratio)
+            # 15% loss (reconstruction quality)
+            # 5% orphans (minimize orphan states)
+            overall_score = (0.40 * state_count_penalty +
+                           0.25 * fragmentation_score + 
+                           0.15 * connectivity_score + 
+                           0.15 * loss_score + 
+                           0.05 * orphan_score)
+            
+            logger.info(f'Graph analysis: {num_components} components, {unreachable} unreachable states, {num_states} total states')
+            logger.info(f'Fragmentation score: {fragmentation_score:.4f}, State count penalty: {state_count_penalty:.4f}, Overall score: {overall_score:.4f}')
             
             metrics = OptimizationMetrics(
                 latent_dim=config['latent_dim'],
@@ -344,10 +457,18 @@ class ModelEvaluator:
                 orphan_percentage=orphan_pct,
                 prerequisite_coverage=summary.get('prerequisite_coverage', 0.0),
                 lattice_connectivity=num_edges / max(num_states, 1),
-                overall_score=overall_score
+                overall_score=overall_score,
+                num_connected_components=num_components,
+                is_fully_connected=(num_components == 1)
             )
             
-            logger.info('Config evaluation complete: score=%.4f', overall_score)
+            logger.info('Config evaluation complete: score=%.4f, components=%d, states=%d', overall_score, num_components, num_states)
+            if num_components > 1:
+                logger.warning('⚠️ Graph is fragmented with %d components! Score penalized.', num_components)
+                print(f'⚠️ [PROGRESS] Graph fragmentation detected: {num_components} components, {unreachable} unreachable states - penalizing score', flush=True)
+            if num_states < min_states_threshold:
+                logger.warning('⚠️ Trivial graph with only %d states (threshold: %d)! Score penalized.', num_states, min_states_threshold)
+                print(f'⚠️ [PROGRESS] Trivial graph detected: only {num_states} states (need ≥{min_states_threshold}) - penalizing score', flush=True)
             return metrics
             
         except Exception as e:
@@ -367,7 +488,9 @@ class ModelEvaluator:
                 orphan_percentage=100.0,
                 prerequisite_coverage=0.0,
                 lattice_connectivity=0.0,
-                overall_score=0.0
+                overall_score=0.0,
+                num_connected_components=999,
+                is_fully_connected=False
             )
 
 
@@ -411,10 +534,13 @@ def find_optimal_hyperparameters(
     
     # 2. Optimize remaining hyperparameters
     logger.info('Phase 2: Optimizing remaining hyperparameters')
+    print(f'[PROGRESS] Starting {n_trials} optimization trials', flush=True)
     
     if use_bayesian:
         try:
             import optuna
+            
+            trial_counter = {'count': 0}
             
             def objective(trial):
                 config = HyperparameterOptimizer.suggest_config(trial, param_space)
@@ -422,10 +548,28 @@ def find_optimal_hyperparameters(
                 metrics = ModelEvaluator.evaluate_config(config, csv_path, trial_out_dir)
                 all_metrics.append(metrics)
                 all_configs.append(config)
+                trial_counter['count'] += 1
                 return metrics.overall_score
             
             study = optuna.create_study(direction='maximize')
-            study.optimize(objective, n_trials=n_trials)
+            
+            def trial_callback(study, trial):
+                """Log trial completion to stdout for progress tracking in main process"""
+                # Get the config from the trial's parameters
+                params = trial.params
+                latent = params.get('latent_dim', '?')
+                k = params.get('select_k', '?')
+                thresh = params.get('pred_threshold', '?')
+                score = trial.value if trial.value is not None else 0.0
+                
+                print(f'[PROGRESS] Trial {trial.number} Testing: latent_dim={latent}, select_k={k}, pred_threshold={thresh:.2f}', flush=True)
+                print(f'[PROGRESS] Trial {trial.number} finished: score={score:.4f}', flush=True)
+                if trial.value is not None:
+                    logger.info(f'Trial {trial.number} completed | value={trial.value:.4f} | params={trial.params}')
+                else:
+                    logger.info(f'Trial {trial.number} completed with error | params={trial.params}')
+            
+            study.optimize(objective, n_trials=n_trials, show_progress_bar=False, callbacks=[trial_callback])
             
             best_config = all_configs[np.argmax([m.overall_score for m in all_metrics])]
             
@@ -435,11 +579,14 @@ def find_optimal_hyperparameters(
     
     if not use_bayesian:
         for trial in range(n_trials):
+            print(f'[PROGRESS] Trial {trial} starting', flush=True)
             config = HyperparameterOptimizer._random_config(param_space)
+            print(f'[PROGRESS] Testing: latent_dim={config["latent_dim"]}, select_k={config["select_k"]}, pred_threshold={config["pred_threshold"]:.2f}', flush=True)
             trial_out_dir = os.path.join(output_dir, f'trial_{trial}')
             metrics = ModelEvaluator.evaluate_config(config, csv_path, trial_out_dir)
             all_metrics.append(metrics)
             all_configs.append(config)
+            print(f'[PROGRESS] Trial {trial} finished: score={metrics.overall_score:.4f}', flush=True)
         
         best_idx = np.argmax([m.overall_score for m in all_metrics])
         best_config = all_configs[best_idx]
@@ -453,8 +600,11 @@ def find_optimal_hyperparameters(
                 'latent_dim': m.latent_dim,
                 'val_loss': m.val_loss,
                 'num_states': m.num_states,
+                'num_edges': m.num_edges,
                 'orphan_percentage': m.orphan_percentage,
                 'overall_score': m.overall_score,
+                'num_connected_components': m.num_connected_components,
+                'is_fully_connected': m.is_fully_connected,
             }
             for cfg, m in zip(all_configs, all_metrics)
         ],
@@ -462,6 +612,14 @@ def find_optimal_hyperparameters(
         'latent_dim_selection': latent_results
     }
     
-    logger.info('Optimization complete. Best score: %.4f', max([m.overall_score for m in all_metrics]))
+    best_metric = all_metrics[np.argmax([m.overall_score for m in all_metrics])]
+    logger.info(f'Optimization complete. Best score: {best_metric.overall_score:.4f}')
+    logger.info(f'Best config components: {best_metric.num_connected_components}, fully_connected: {best_metric.is_fully_connected}')
+    
+    if best_metric.is_fully_connected:
+        print(f'[PROGRESS] ✅ OPTIMIZACIJA ZAVRŠENA - Pronađen POVEZAN graf sa {best_metric.num_states} stanja i {best_metric.num_edges} prelaza!', flush=True)
+    else:
+        logger.warning(f'⚠️ WARNING: Best config has {best_metric.num_connected_components} components - still fragmented!')
+        print(f'[PROGRESS] ⚠️ Best config is fragmented with {best_metric.num_connected_components} components', flush=True)
     
     return results

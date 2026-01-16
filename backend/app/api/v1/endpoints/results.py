@@ -23,8 +23,8 @@ async def list_results(
     """List results with optional filtering and pagination."""
     base = db.query(Result, Task, Upload).join(Task, Result.task_id == Task.id).join(Upload, Task.upload_id == Upload.id)
 
-    if algorithm:
-        base = base.filter(Result.algorithm == algorithm)
+    # Note: algorithm filter removed as Result model doesn't have algorithm column
+    # Algorithm info is in Task.parameters['mode']
     if upload_id:
         base = base.filter(Task.upload_id == upload_id)
     if date_from:
@@ -43,11 +43,13 @@ async def list_results(
     items = []
     for r, t, u in rows:
         has_png = bool((r.result_metadata or {}).get("png_key"))
+        # Extract algorithm from task parameters if available
+        algorithm = (t.parameters or {}).get('mode', 'unknown')
         items.append({
             "result_id": r.id,
             "task_id": r.task_id,
             "status": t.status,
-            "algorithm": r.algorithm,
+            "algorithm": algorithm,
             "created_at": r.created_at,
             "completed_at": t.completed_at,
             "upload_id": u.id,
@@ -81,19 +83,21 @@ async def get_result(
         learning_space_data = None
     
     # Add learning space to result (not in DB model, but in API response)
+    meta = result.result_metadata or {}
+    
     result_dict = {
         "id": result.id,
         "task_id": result.task_id,
         "graph_storage_key": result.graph_storage_key,
         "num_states": result.num_states,
         "num_edges": result.num_edges,
-        "num_relations": result.num_relations,
-        "discrepancy": result.discrepancy,
-        "is_valid": result.is_valid,
-        "algorithm": result.algorithm,
-        "final_generation": result.final_generation,
+        "num_relations": meta.get("num_relations"),
+        "discrepancy": meta.get("discrepancy"),
+        "is_valid": meta.get("is_valid"),
+        "algorithm": meta.get("algorithm"),
+        "final_generation": meta.get("final_generation"),
         "execution_time_seconds": result.execution_time_seconds,
-        "result_metadata": result.result_metadata,
+        "result_metadata": meta,
         "created_at": result.created_at,
         "learning_space": learning_space_data
     }
@@ -133,7 +137,7 @@ async def download_result(
         )
 
 
-@router.delete("/results/{task_id}")
+@router.delete("/{task_id}")
 async def delete_result(
     task_id: int,
     db: Session = Depends(get_db)

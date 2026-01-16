@@ -43,6 +43,10 @@ export const getTasks = async () => {
   return data;
 };
 
+export const deleteTask = async (taskId: number) => {
+  await api.delete(`/tasks/tasks/${taskId}`);
+};
+
 // Result endpoints
 export const getResult = async (taskId: number) => {
   const { data } = await api.get(`/results/${taskId}`);

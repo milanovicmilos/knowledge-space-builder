@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { FiClock, FiZap, FiCheck, FiAlertCircle, FiRotateCcw, FiDownload, FiImage } from 'react-icons/fi';
-import { getTask, getResult } from '../api/client';
+import { FiClock, FiZap, FiCheck, FiAlertCircle, FiRotateCcw, FiDownload, FiImage, FiX } from 'react-icons/fi';
+import { getTask, getResult, deleteTask } from '../api/client';
 import { GraphVisualization } from './GraphVisualization';
 import type { Task, Result } from '../types/api';
 import './TaskStatus.css';
@@ -15,29 +15,71 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
   const [result, setResult] = useState<Result | null>(null);
   const [graphData, setGraphData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [stopping, setStopping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resultError, setResultError] = useState<string | null>(null);
+
+  const handleStop = async () => {
+    if (!taskId || stopping) return;
+    setStopping(true);
+    try {
+      await deleteTask(taskId);
+      // Reset local state
+      setTask(null);
+      setResult(null);
+      setGraphData(null);
+      if (onReset) onReset();
+    } catch (err) {
+      setError('Failed to stop task. Please retry.');
+      console.error('Failed to stop task', err);
+    } finally {
+      setStopping(false);
+    }
+  };
 
   useEffect(() => {
     const fetchTaskStatus = async () => {
       try {
+        setError(null);
         const taskData = await getTask(taskId);
         setTask(taskData);
 
         if (taskData.status === 'completed') {
-          const resultData = await getResult(taskId);
-          setResult(resultData);
-          
-          // Fetch JSON graph data
           try {
-            const response = await fetch(`/api/v1/results/${taskId}/download`);
-            if (response.ok) {
-              const jsonData = await response.json();
-              setGraphData(jsonData);
+            const resultData = await getResult(taskId);
+            setResult(resultData);
+            setResultError(null);
+            
+            try {
+              const response = await fetch(`/api/v1/results/${taskId}/download`);
+              if (response.ok) {
+                const jsonData = await response.json();
+                setGraphData(jsonData);
+              } else {
+                setResultError('Result file not available yet.');
+              }
+            } catch (err) {
+              setResultError('Result file not available yet.');
+              console.error('Failed to fetch graph data:', err);
             }
-          } catch (err) {
-            console.error('Failed to fetch graph data:', err);
+          } catch (err: any) {
+            const statusCode = err?.response?.status;
+            if (statusCode === 404) {
+              setResult(null);
+              setGraphData(null);
+              setResultError('Result not available yet.');
+            } else {
+              setResultError('Failed to load result.');
+              console.error('Failed to fetch result:', err);
+            }
           }
+        } else {
+          setResult(null);
+          setGraphData(null);
+          setResultError(null);
         }
       } catch (err) {
+        setError('Failed to load task status.');
         console.error('Failed to fetch task status:', err);
       } finally {
         setLoading(false);
@@ -58,6 +100,9 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
 
   if (loading) return <div className="loading">Loading task status...</div>;
   if (!task) return <div className="error-banner">Task not found</div>;
+
+  const progressPercent = task.progress_percent ?? 0;
+  const isActive = task.status === 'running' || task.status === 'pending';
 
   const getStatusEmoji = (status: string) => {
     switch (status) {
@@ -84,8 +129,19 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
     switch (details.stage) {
       case 'initializing':
         return 'Preparing environment...';
+      case 'optimizing': {
+        const trialLabel = details.trial !== undefined ? `Trial ${details.trial + 1}${details.max_trials ? `/${details.max_trials}` : ''}` : 'Running trials';
+        const valuePart = details.trial_value !== undefined ? ` · Value: ${details.trial_value.toFixed(4)}` : '';
+        return `Hyperparameter search: ${trialLabel}${valuePart}`;
+      }
       case 'training':
-        return `Training: Epoch ${details.epoch}${details.max_epochs ? `/${details.max_epochs}` : ''} - Loss: ${details.current_loss?.toFixed(4)}`;
+        {
+          const trialPart = details.trial !== undefined ? `Trial ${details.trial + 1}${details.max_trials ? `/${details.max_trials}` : ''} · ` : '';
+          const epochPart = details.epoch ? `Epoch ${details.epoch}${details.max_epochs ? `/${details.max_epochs}` : ''}` : 'Training in progress';
+          const lossPart = details.current_loss !== undefined ? ` - Loss: ${details.current_loss.toFixed(4)}` : '';
+          const configPart = details.trial_config ? ` (latent=${details.trial_config.latent_dim}, k=${details.trial_config.select_k})` : '';
+          return `${trialPart}${epochPart}${lossPart}${configPart}`;
+        }
       case 'building_prerequisites':
         return 'Building prerequisite graph...';
       case 'building_lattice':
@@ -108,16 +164,27 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
             <h3>Task #{taskId} status</h3>
             <p className="hint">Live progress, metrics, and logs.</p>
           </div>
-          <span className={`status-chip status-${task.status}`}>{getStatusEmoji(task.status)} {task.status.toUpperCase()}</span>
+          <div className="status-actions">
+            <span className={`status-chip status-${task.status}`}>{getStatusEmoji(task.status)} {task.status.toUpperCase()}</span>
+              {isActive && (
+              <button className="ghost-btn danger" onClick={handleStop} disabled={stopping}>
+                <FiX size={14} style={{ marginRight: '0.35rem' }} /> {stopping ? 'Stopping...' : 'Stop task'}
+              </button>
+            )}
+          </div>
         </div>
+
+          {error && (
+            <div className="error-banner">{error}</div>
+          )}
 
         <div className="progress-wrapper">
           <div className="progress">
-            <div className="progress-fill" style={{ width: `${task.progress_percent}%` }} />
+              <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
           </div>
           <div className="progress-meta">
             <span className="progress-label">Progress</span>
-            <strong>{task.progress_percent}%</strong>
+              <strong>{progressPercent}%</strong>
             {task.progress_details?.eta_seconds && (
               <span className="eta">ETA: {formatTime(task.progress_details.eta_seconds)}</span>
             )}
@@ -131,23 +198,72 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
               <p className="hint">Real-time training progress and loss tracking.</p>
             </div>
             <div className="metric-grid">
-              {task.progress_details?.epoch && (
-                <div className="metric">
-                  <p className="label">Epoch</p>
-                  <strong>{task.progress_details.epoch}</strong>
-                </div>
-              )}
-              {task.progress_details?.current_loss && (
-                <div className="metric">
-                  <p className="label">Current loss</p>
-                  <strong>{task.progress_details.current_loss.toFixed(4)}</strong>
-                </div>
-              )}
-              {task.progress_details?.num_states && (
-                <div className="metric">
-                  <p className="label">States</p>
-                  <strong>{task.progress_details.num_states}</strong>
-                </div>
+              {task.progress_details?.stage === 'optimizing' ? (
+                <>
+                  {task.progress_details?.trial !== undefined && (
+                    <div className="metric">
+                      <p className="label">Trial</p>
+                      <strong>{task.progress_details.trial + 1}</strong>
+                    </div>
+                  )}
+                  {task.progress_details?.max_trials && (
+                    <div className="metric">
+                      <p className="label">Total trials</p>
+                      <strong>{task.progress_details.max_trials}</strong>
+                    </div>
+                  )}
+                  {task.progress_details?.trial_value !== undefined && (
+                    <div className="metric">
+                      <p className="label">Trial value</p>
+                      <strong>{task.progress_details.trial_value.toFixed(4)}</strong>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {task.progress_details?.trial !== undefined && (
+                    <div className="metric">
+                      <p className="label">Trial</p>
+                      <strong>{task.progress_details.trial + 1}{task.progress_details.max_trials ? `/${task.progress_details.max_trials}` : ''}</strong>
+                    </div>
+                  )}
+                  {task.progress_details?.epoch && (
+                    <div className="metric">
+                      <p className="label">Epoch</p>
+                      <strong>{task.progress_details.epoch}{task.progress_details.max_epochs ? `/${task.progress_details.max_epochs}` : ''}</strong>
+                    </div>
+                  )}
+                  {task.progress_details?.current_loss !== undefined && (
+                    <div className="metric">
+                      <p className="label">Loss</p>
+                      <strong>{task.progress_details.current_loss.toFixed(4)}</strong>
+                    </div>
+                  )}
+                  {task.progress_details?.trial_config?.latent_dim && (
+                    <div className="metric">
+                      <p className="label">Latent dim</p>
+                      <strong>{task.progress_details.trial_config.latent_dim}</strong>
+                    </div>
+                  )}
+                  {task.progress_details?.trial_config?.select_k && (
+                    <div className="metric">
+                      <p className="label">Select K</p>
+                      <strong>{task.progress_details.trial_config.select_k}</strong>
+                    </div>
+                  )}
+                  {task.progress_details?.trial_config?.pred_threshold && (
+                    <div className="metric">
+                      <p className="label">Pred threshold</p>
+                      <strong>{task.progress_details.trial_config.pred_threshold.toFixed(2)}</strong>
+                    </div>
+                  )}
+                  {task.progress_details?.num_states && (
+                    <div className="metric">
+                      <p className="label">States</p>
+                      <strong>{task.progress_details.num_states}</strong>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -189,6 +305,10 @@ export function TaskStatus({ taskId, onReset }: TaskStatusProps) {
               <p className="hint">Key metrics and result export.</p>
             </div>
           </div>
+
+            {resultError && (
+              <div className="error-banner">{resultError}</div>
+            )}
 
           <div className="metric-grid wide">
             <div className="metric card">

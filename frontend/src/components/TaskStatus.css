@@ -15,6 +15,22 @@
   align-items: center;
 }
 
+.status-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ghost-btn.danger {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+}
+
+.ghost-btn.danger:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
 .status-chip {
   padding: var(--space-2) var(--space-3);
   border-radius: 999px;

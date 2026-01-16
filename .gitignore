@@ -23,6 +23,7 @@ __pycache__/
 
 # Logs
 *.log
+optimization_log.txt
 
 # Output (project-specific)
 output/

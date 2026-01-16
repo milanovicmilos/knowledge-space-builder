@@ -7,6 +7,10 @@ import json
 import os
 from pathlib import Path
 
+# Force line buffering for stdout to ensure prints reach subprocess parent immediately
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(line_buffering=True)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -93,6 +97,65 @@ def main_evaluate(args):
     return report
 
 
+def main_manual_pipeline(args):
+    """Run full pipeline with manually specified parameters."""
+    from ..infrastructure.model_selection import OptimizationParams
+    from ..application.orchestrator import LearningSpaceBuilder, BuilderConfig
+    from ..infrastructure.quality_metrics import QualityReport
+    
+    logger.info('Starting manual pipeline: train → build → evaluate')
+    
+    # 1. Build config from args
+    logger.info('=== Phase 1: Configuring Pipeline ===')
+    
+    builder_config = BuilderConfig(
+        csv_path=args.csv,
+        out_dir=args.out_dir,
+        epochs=args.epochs,
+        latent=args.latent_dim,
+        pred_threshold=args.pred_threshold,
+        implication_threshold=args.implication_threshold,
+        select_k=args.select_k,
+        min_support=args.min_support,
+        min_known=args.min_known
+    )
+    
+    # Save manual config for reference
+    os.makedirs(args.out_dir, exist_ok=True)
+    with open(os.path.join(args.out_dir, 'manual_config.json'), 'w') as f:
+        json.dump(vars(builder_config), f, indent=2, default=str)
+
+    # 2. Run Pipeline
+    logger.info('=== Phase 2: Execution (Train & Build) ===')
+    builder = LearningSpaceBuilder(builder_config)
+    results = builder.run_all(run_train=True)
+    
+    # 3. Evaluate quality
+    logger.info('=== Phase 3: Quality Evaluation ===')
+    
+    lattice_json = results['lattice_json']
+    pred_probs = results['pred_probs']
+    item_cols = results['item_cols']
+    prereq = results['prereq']
+    
+    report = QualityReport.generate_report(
+        csv_path=args.csv,
+        lattice_json_path=lattice_json,
+        pred_probs_path=pred_probs,
+        item_cols_path=item_cols,
+        prereq_graph_path=prereq,
+        pred_threshold=args.pred_threshold,
+        implication_threshold=args.implication_threshold,
+        output_path=os.path.join(args.out_dir, 'quality_report.json')
+    )
+    
+    # Log summary
+    logger.info('=== Final Quality Report ===')
+    logger.info(f"Dataset: {report['dataset_info']['num_students']} students, {report['dataset_info']['num_items']} items")
+    logger.info(f"Knowledge Space: {report['knowledge_space_metrics']['connectivity']['num_states']} states, "
+                f"{report['knowledge_space_metrics']['connectivity']['num_edges']} edges")
+
+
 def main_full_pipeline(args):
     """Run full pipeline: optimization + build + evaluate."""
     from ..infrastructure.model_selection import find_optimal_hyperparameters, OptimizationParams
@@ -172,8 +235,22 @@ def main_full_pipeline(args):
     
     # Save final config
     final_config_path = os.path.join(args.out_dir, 'optimal_config.json')
+    
+    # Helper to convert numpy types
+    def default_converter(o):
+        import numpy as np
+        if isinstance(o, (np.int_, np.intc, np.intp, np.int8,
+                          np.int16, np.int32, np.int64, np.uint8,
+                          np.uint16, np.uint32, np.uint64)):
+            return int(o)
+        elif isinstance(o, (np.float_, np.float16, np.float32, np.float64)):
+            return float(o)
+        elif isinstance(o, (np.ndarray,)):
+            return o.tolist()
+        raise TypeError(f'Object of type {o.__class__.__name__} is not JSON serializable')
+
     with open(final_config_path, 'w') as f:
-        json.dump(optimal_config, f, indent=2)
+        json.dump(optimal_config, f, indent=2, default=default_converter)
     logger.info('Optimal config saved to %s', final_config_path)
     
     return {'optimization': opt_results, 'quality_report': report, 'results': results}
@@ -211,6 +288,19 @@ if __name__ == '__main__':
     full_parser.add_argument('--out_dir', default='learning_space_generator/output', help='Output directory')
     full_parser.add_argument('--n_trials', type=int, default=10, help='Number of optimization trials')
     full_parser.set_defaults(func=main_full_pipeline)
+
+    # Manual pipeline command
+    manual_parser = subparsers.add_parser('manual', help='Run manual build + evaluate pipeline')
+    manual_parser.add_argument('--csv', required=True, help='Input CSV file')
+    manual_parser.add_argument('--out_dir', default='learning_space_generator/output', help='Output directory')
+    manual_parser.add_argument('--epochs', type=int, default=100, help='Number of training epochs')
+    manual_parser.add_argument('--latent_dim', type=int, default=5, help='Latent dimension size')
+    manual_parser.add_argument('--select_k', type=int, default=5, help='Number of implications per item')
+    manual_parser.add_argument('--pred_threshold', type=float, default=0.6, help='Prediction threshold')
+    manual_parser.add_argument('--implication_threshold', type=float, default=0.85, help='Implication threshold')
+    manual_parser.add_argument('--min_support', type=int, default=5, help='Minimum support for implications')
+    manual_parser.add_argument('--min_known', type=int, default=2, help='Minimum known items per user')
+    manual_parser.set_defaults(func=main_manual_pipeline)
     
     args = parser.parse_args()
     

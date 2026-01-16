@@ -6,7 +6,11 @@ WORKDIR /app
 COPY requirements.txt .
 COPY lsg_requirements.txt .
 
-# Install Python packages (backend + learning_space_generator dependencies)
+# Install CPU-only PyTorch first (significantly reduces image size and build time)
+# We do this before generic requirements to ensure the CPU version is preferred
+RUN pip install --no-cache-dir "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining Python packages
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir -r lsg_requirements.txt
 

@@ -66,3 +66,41 @@ async def list_tasks(
     """List recent tasks"""
     tasks = db.query(Task).order_by(Task.created_at.desc()).limit(limit).all()
     return tasks
+
+@router.delete("/tasks/{task_id}")
+async def stop_task(
+    task_id: int,
+    db: Session = Depends(get_db)
+):
+    """Stop and delete a task"""
+    from app.celery_app import celery_app
+    from app.models.result import Result
+    from app.services.storage import storage_service
+    import shutil
+    import os
+    
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(404, "Task not found")
+    
+    # Revoke Celery task if running
+    if task.celery_task_id:
+        celery_app.control.revoke(task.celery_task_id, terminate=True)
+    
+    # Delete result if exists
+    result = db.query(Result).filter(Result.task_id == task_id).first()
+    if result:
+        try:
+            # Delete storage file
+            file_path = storage_service.get_file_path(result.graph_storage_key)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass
+        db.delete(result)
+    
+    # Delete task
+    db.delete(task)
+    db.commit()
+    
+    return {"status": "deleted", "task_id": task_id}

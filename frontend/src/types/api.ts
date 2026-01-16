@@ -10,23 +10,27 @@ export interface Upload {
 }
 
 export interface TaskParameters {
+  // Optimization vs Manual
+  mode?: 'optimize' | 'manual';
+  n_trials?: number;
+
   // MIRT-VAE Training options
-  epochs: number;
-  latent_dim: number;
-  device: string;
+  epochs?: number;
+  latent_dim?: number;
+  device?: string;
   
   // Prerequisite graph options
-  pred_threshold: number;
-  implication_threshold: number;
-  min_known: number;
+  pred_threshold?: number;
+  implication_threshold?: number;
+  min_known?: number;
   
   // Lattice construction options
-  select_k: number;
-  min_support: number;
-  force_k: boolean;
+  select_k?: number;
+  min_support?: number;
+  force_k?: boolean;
   
   // Output options
-  generate_png: boolean;
+  generate_png?: boolean;
 }
 
 export interface Task {
@@ -45,6 +49,15 @@ export interface Task {
     num_states?: number;
     total_unique?: number;
     eta_seconds?: number;
+    trial?: number;
+    max_trials?: number;
+    trial_value?: number;
+    trial_config?: {
+      latent_dim?: number;
+      epochs?: number;
+      pred_threshold?: number;
+      select_k?: number;
+    };
   } | null;
   error_message: string | null;
   created_at: string;
