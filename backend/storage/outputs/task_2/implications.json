@@ -1,0 +1,482 @@
+[
+  {
+    "source": "s1m11a091",
+    "target": "s1m11a101"
+  },
+  {
+    "source": "s1m11a101",
+    "target": "s1m11a111"
+  },
+  {
+    "source": "s1m11a111",
+    "target": "s1m11b131"
+  },
+  {
+    "source": "s1m11b131",
+    "target": "s1m11b141"
+  },
+  {
+    "source": "s1m11b141",
+    "target": "s1m11b151"
+  },
+  {
+    "source": "s1m11b151",
+    "target": "s1m12a171"
+  },
+  {
+    "source": "s1m12a171",
+    "target": "s1m12a191"
+  },
+  {
+    "source": "s1m12a191",
+    "target": "s1m12a671"
+  },
+  {
+    "source": "s1m12a671",
+    "target": "s1m12b021"
+  },
+  {
+    "source": "s1m12b021",
+    "target": "s1m12b021neu"
+  },
+  {
+    "source": "s1m12b021neu",
+    "target": "s1m12b201"
+  },
+  {
+    "source": "s1m12b201",
+    "target": "s1m21a231"
+  },
+  {
+    "source": "s1m21a231",
+    "target": "s1m21a241"
+  },
+  {
+    "source": "s1m21a241",
+    "target": "s1m21a291"
+  },
+  {
+    "source": "s1m21a291",
+    "target": "s1m21b032"
+  },
+  {
+    "source": "s1m21b032",
+    "target": "s1m21b052"
+  },
+  {
+    "source": "s1m21b052",
+    "target": "s1m21b261"
+  },
+  {
+    "source": "s1m21b261",
+    "target": "s1m21b262"
+  },
+  {
+    "source": "s1m21b262",
+    "target": "s1m22a013"
+  },
+  {
+    "source": "s1m22a013",
+    "target": "s1m22a022neu"
+  },
+  {
+    "source": "s1m22a022neu",
+    "target": "s1m22a082"
+  },
+  {
+    "source": "s1m22a082",
+    "target": "s1m22b043"
+  },
+  {
+    "source": "s1m22b043",
+    "target": "s1m22b073"
+  },
+  {
+    "source": "s1m22b073",
+    "target": "s1m22b511"
+  },
+  {
+    "source": "s1m22b511",
+    "target": "s1m23a081"
+  },
+  {
+    "source": "s1m23a081",
+    "target": "s1m23a301"
+  },
+  {
+    "source": "s1m23a301",
+    "target": "s1m23a311"
+  },
+  {
+    "source": "s1m23a311",
+    "target": "s1m23b331"
+  },
+  {
+    "source": "s1m23b331",
+    "target": "s1m23b351"
+  },
+  {
+    "source": "s1m23b351",
+    "target": "s1m23b651"
+  },
+  {
+    "source": "s1m23b651",
+    "target": "s1m24a371"
+  },
+  {
+    "source": "s1m24a371",
+    "target": "s1m24a391"
+  },
+  {
+    "source": "s1m24a391",
+    "target": "s1m24a421"
+  },
+  {
+    "source": "s1m24a421",
+    "target": "s1m24b053"
+  },
+  {
+    "source": "s1m24b053",
+    "target": "s1m24b401"
+  },
+  {
+    "source": "s1m24b401",
+    "target": "s1m24b411"
+  },
+  {
+    "source": "s1m24b411",
+    "target": "s1m31a452"
+  },
+  {
+    "source": "s1m31a452",
+    "target": "s1m31a461"
+  },
+  {
+    "source": "s1m31a461",
+    "target": "s1m31a471"
+  },
+  {
+    "source": "s1m31a471",
+    "target": "s1m31b044"
+  },
+  {
+    "source": "s1m31b044",
+    "target": "s1m31b083"
+  },
+  {
+    "source": "s1m31b083",
+    "target": "s1m31b481"
+  },
+  {
+    "source": "s1m31b481",
+    "target": "s1m32a011"
+  },
+  {
+    "source": "s1m32a011",
+    "target": "s1m32a031"
+  },
+  {
+    "source": "s1m32a031",
+    "target": "s1m32a431"
+  },
+  {
+    "source": "s1m32a431",
+    "target": "s1m32b054"
+  },
+  {
+    "source": "s1m32b054",
+    "target": "s1m32b062"
+  },
+  {
+    "source": "s1m32b062",
+    "target": "s1m32b072"
+  },
+  {
+    "source": "s1m32b072",
+    "target": "s1m33a012"
+  },
+  {
+    "source": "s1m33a012",
+    "target": "s1m33a531"
+  },
+  {
+    "source": "s1m33a531",
+    "target": "s1m33a541"
+  },
+  {
+    "source": "s1m33a541",
+    "target": "s1m33b074"
+  },
+  {
+    "source": "s1m33b074",
+    "target": "s1m33b561"
+  },
+  {
+    "source": "s1m33b561",
+    "target": "s1m33b571"
+  },
+  {
+    "source": "s1m33b571",
+    "target": "s1m34a281"
+  },
+  {
+    "source": "s1m34a281",
+    "target": "s1m34a451"
+  },
+  {
+    "source": "s1m34a451",
+    "target": "s1m34a631"
+  },
+  {
+    "source": "s1m34a631",
+    "target": "s1m34b023"
+  },
+  {
+    "source": "s1m34b023",
+    "target": "s1m34b023neu"
+  },
+  {
+    "source": "s1m34b023neu",
+    "target": "s1m34b051"
+  },
+  {
+    "source": "s1m34b051",
+    "target": "s1m34b084"
+  },
+  {
+    "source": "s1m34b084",
+    "target": "s2m11a091"
+  },
+  {
+    "source": "s2m11a091",
+    "target": "s2m11a101"
+  },
+  {
+    "source": "s2m11a101",
+    "target": "s2m11a111"
+  },
+  {
+    "source": "s2m11a111",
+    "target": "s2m11b131"
+  },
+  {
+    "source": "s2m11b131",
+    "target": "s2m11b141"
+  },
+  {
+    "source": "s2m11b141",
+    "target": "s2m11b151"
+  },
+  {
+    "source": "s2m11b151",
+    "target": "s2m12a171"
+  },
+  {
+    "source": "s2m12a171",
+    "target": "s2m12a191"
+  },
+  {
+    "source": "s2m12a191",
+    "target": "s2m12a671"
+  },
+  {
+    "source": "s2m12a671",
+    "target": "s2m12b021"
+  },
+  {
+    "source": "s2m12b021",
+    "target": "s2m12b201"
+  },
+  {
+    "source": "s2m12b201",
+    "target": "s2m21a231"
+  },
+  {
+    "source": "s2m21a231",
+    "target": "s2m21a241"
+  },
+  {
+    "source": "s2m21a241",
+    "target": "s2m21a291"
+  },
+  {
+    "source": "s2m21a291",
+    "target": "s2m21b032"
+  },
+  {
+    "source": "s2m21b032",
+    "target": "s2m21b052"
+  },
+  {
+    "source": "s2m21b052",
+    "target": "s2m21b261"
+  },
+  {
+    "source": "s2m21b261",
+    "target": "s2m21b262"
+  },
+  {
+    "source": "s2m21b262",
+    "target": "s2m22a013"
+  },
+  {
+    "source": "s2m22a013",
+    "target": "s2m22a082"
+  },
+  {
+    "source": "s2m22a082",
+    "target": "s2m22b043"
+  },
+  {
+    "source": "s2m22b043",
+    "target": "s2m22b073"
+  },
+  {
+    "source": "s2m22b073",
+    "target": "s2m22b511"
+  },
+  {
+    "source": "s2m22b511",
+    "target": "s2m23a081"
+  },
+  {
+    "source": "s2m23a081",
+    "target": "s2m23a301"
+  },
+  {
+    "source": "s2m23a301",
+    "target": "s2m23a311"
+  },
+  {
+    "source": "s2m23a311",
+    "target": "s2m23b331"
+  },
+  {
+    "source": "s2m23b331",
+    "target": "s2m23b351"
+  },
+  {
+    "source": "s2m23b351",
+    "target": "s2m23b651"
+  },
+  {
+    "source": "s2m23b651",
+    "target": "s2m24a371"
+  },
+  {
+    "source": "s2m24a371",
+    "target": "s2m24a391"
+  },
+  {
+    "source": "s2m24a391",
+    "target": "s2m24a421"
+  },
+  {
+    "source": "s2m24a421",
+    "target": "s2m24b053"
+  },
+  {
+    "source": "s2m24b053",
+    "target": "s2m24b401"
+  },
+  {
+    "source": "s2m24b401",
+    "target": "s2m24b411"
+  },
+  {
+    "source": "s2m24b411",
+    "target": "s2m31a452"
+  },
+  {
+    "source": "s2m31a452",
+    "target": "s2m31a461"
+  },
+  {
+    "source": "s2m31a461",
+    "target": "s2m31a471"
+  },
+  {
+    "source": "s2m31a471",
+    "target": "s2m31b044"
+  },
+  {
+    "source": "s2m31b044",
+    "target": "s2m31b083"
+  },
+  {
+    "source": "s2m31b083",
+    "target": "s2m31b481"
+  },
+  {
+    "source": "s2m31b481",
+    "target": "s2m32a011"
+  },
+  {
+    "source": "s2m32a011",
+    "target": "s2m32a031"
+  },
+  {
+    "source": "s2m32a031",
+    "target": "s2m32a431"
+  },
+  {
+    "source": "s2m32a431",
+    "target": "s2m32b054"
+  },
+  {
+    "source": "s2m32b054",
+    "target": "s2m32b062"
+  },
+  {
+    "source": "s2m32b062",
+    "target": "s2m32b072"
+  },
+  {
+    "source": "s2m32b072",
+    "target": "s2m33a012"
+  },
+  {
+    "source": "s2m33a012",
+    "target": "s2m33a531"
+  },
+  {
+    "source": "s2m33a531",
+    "target": "s2m33a541"
+  },
+  {
+    "source": "s2m33a541",
+    "target": "s2m33b074"
+  },
+  {
+    "source": "s2m33b074",
+    "target": "s2m33b561"
+  },
+  {
+    "source": "s2m33b561",
+    "target": "s2m33b571"
+  },
+  {
+    "source": "s2m33b571",
+    "target": "s2m34a281"
+  },
+  {
+    "source": "s2m34a281",
+    "target": "s2m34a451"
+  },
+  {
+    "source": "s2m34a451",
+    "target": "s2m34a631"
+  },
+  {
+    "source": "s2m34a631",
+    "target": "s2m34b023"
+  },
+  {
+    "source": "s2m34b023",
+    "target": "s2m34b051"
+  },
+  {
+    "source": "s2m34b051",
+    "target": "s2m34b084"
+  }
+]

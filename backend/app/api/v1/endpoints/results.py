@@ -42,14 +42,16 @@ async def list_results(
 
     items = []
     for r, t, u in rows:
-        has_png = bool((r.result_metadata or {}).get("png_key"))
+        meta = r.result_metadata or {}
+        has_png = bool(meta.get("png_key") or meta.get("graph_image_file"))
+        has_ontology = bool(meta.get("ontology_file"))
         # Extract algorithm from task parameters if available
         algorithm = (t.parameters or {}).get('mode', 'unknown')
         items.append({
             "result_id": r.id,
             "task_id": r.task_id,
             "status": t.status,
-            "algorithm": algorithm,
+            "algorithm": r.algorithm or algorithm,
             "created_at": r.created_at,
             "completed_at": t.completed_at,
             "upload_id": u.id,
@@ -57,6 +59,7 @@ async def list_results(
             "num_states": r.num_states,
             "num_edges": r.num_edges,
             "has_png": has_png,
+            "has_ontology": has_ontology,
         })
 
     return {"total": total, "items": items}
@@ -94,7 +97,7 @@ async def get_result(
         "num_relations": meta.get("num_relations"),
         "discrepancy": meta.get("discrepancy"),
         "is_valid": meta.get("is_valid"),
-        "algorithm": meta.get("algorithm"),
+        "algorithm": result.algorithm or meta.get("algorithm"),
         "final_generation": meta.get("final_generation"),
         "execution_time_seconds": result.execution_time_seconds,
         "result_metadata": meta,
@@ -117,7 +120,9 @@ async def download_result(
     
     if format == 'png':
         # Get PNG from metadata
-        png_key = result.result_metadata.get('png_key') if result.result_metadata else None
+        meta = result.result_metadata or {}
+        png_key = meta.get('png_key') or meta.get('graph_image_file')
+        
         if not png_key:
             raise HTTPException(404, "PNG visualization not available for this result")
         
@@ -127,8 +132,30 @@ async def download_result(
             media_type='image/png',
             filename=f'learning_space_{task_id}.png'
         )
+    elif format == 'ontology' or format == 'ttl':
+        meta = result.result_metadata or {}
+        key = meta.get('ontology_file')
+        if not key:
+            raise HTTPException(404, "Ontology not available for this result")
+        file_path = storage_service.get_file_path(key)
+        return FileResponse(
+            path=file_path,
+            media_type='text/turtle',
+            filename=f'sotis_ontology_{task_id}.ttl'
+        )
+    elif format == 'clusters':
+        meta = result.result_metadata or {}
+        key = meta.get('semantic_clusters_file')
+        if not key:
+            raise HTTPException(404, "Semantic clusters not available for this result")
+        file_path = storage_service.get_file_path(key)
+        return FileResponse(
+            path=file_path,
+            media_type='application/json',
+            filename=f'semantic_clusters_{task_id}.json'
+        )
     else:
-        # Default: JSON
+        # Default: JSON (Knowledge Space)
         file_path = storage_service.get_file_path(result.graph_storage_key)
         return FileResponse(
             path=file_path,

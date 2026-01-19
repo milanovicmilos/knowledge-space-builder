@@ -82,6 +82,9 @@ export function ResultsPanel({ onOpenTask }: ResultsPanelProps) {
                     {it.has_png && (
                       <a className="ghost-btn" href={`/api/v1/results/${it.task_id}/download?format=png`}>PNG</a>
                     )}
+                    {it.has_ontology && (
+                       <a className="ghost-btn" href={`/api/v1/results/${it.task_id}/download?format=ontology`}>TTL</a>
+                    )}
                     <button 
                       className="ghost-btn delete-btn"
                       onClick={() => setConfirmDelete(it.task_id)}

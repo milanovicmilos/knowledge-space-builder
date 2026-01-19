@@ -10,26 +10,22 @@ export interface Upload {
 }
 
 export interface TaskParameters {
-  // Optimization vs Manual
-  mode?: 'optimize' | 'manual';
+  // LSG Pipeline Options
+  mode?: 'lsg_pipeline' | 'optimize' | 'manual';
+  iita_threshold?: number;   // Default 0.5
+  semantic_weight?: number;  // Default 0.3
+  
+  // Legacy options (kept for compatibility)
   n_trials?: number;
-
-  // MIRT-VAE Training options
   epochs?: number;
   latent_dim?: number;
   device?: string;
-  
-  // Prerequisite graph options
   pred_threshold?: number;
   implication_threshold?: number;
   min_known?: number;
-  
-  // Lattice construction options
   select_k?: number;
   min_support?: number;
   force_k?: boolean;
-  
-  // Output options
   generate_png?: boolean;
 }
 

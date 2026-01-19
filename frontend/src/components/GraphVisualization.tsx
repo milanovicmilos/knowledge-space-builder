@@ -101,7 +101,7 @@ export function GraphVisualization({ graphData }: GraphVisualizationProps) {
       graphData = data.clusters[clusterFilter].learning_space || {};
     } else {
       // Use merged or raw data
-      graphData = data?.merged_learning_space || data;
+      graphData = data?.merged_learning_space || data?.learning_space || data;
     }
     
     if (!graphData || typeof graphData !== 'object') {

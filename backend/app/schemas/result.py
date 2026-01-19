@@ -35,6 +35,7 @@ class ResultListItem(BaseModel):
     num_states: int | None = None
     num_edges: int | None = None
     has_png: bool = False
+    has_ontology: bool = False
 
 
 class ResultsListResponse(BaseModel):

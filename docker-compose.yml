@@ -1,90 +1,70 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: lsg-postgres
-    environment:
-      POSTGRES_DB: learning_space_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: lsg-redis
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: lsg-backend
+    build: 
+      context: .
+      dockerfile: ./backend/Dockerfile
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/storage:/app/storage
+      - ./learning_space_generator:/app/learning_space_generator
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/learning_space_db
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_PATH=/app/storage
+      - STORAGE_TYPE=local
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost,http://localhost:80
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/learning_space_db
-      - REDIS_URL=redis://redis:6379/0
-      - STORAGE_TYPE=local
-      - STORAGE_PATH=/app/storage
-      - DEBUG=True
-      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost
-    volumes:
-      - ./backend/app:/app/app
-      - ./learning_space_generator:/app/learning_space_generator:ro
-      - storage_data:/app/storage
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
+      - redis
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  celery:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: lsg-celery
+  celery_worker:
+    build: 
+      context: .
+      dockerfile: ./backend/Dockerfile
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/storage:/app/storage
+      - ./learning_space_generator:/app/learning_space_generator
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/learning_space_db
       - REDIS_URL=redis://redis:6379/0
-      - STORAGE_TYPE=local
       - STORAGE_PATH=/app/storage
-    volumes:
-      - ./backend/app:/app/app
-      - ./learning_space_generator:/app/learning_space_generator:ro
-      - storage_data:/app/storage
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+      - backend
+      - redis
+      - postgres
+    command: celery -A app.celery_app.celery_app worker --loglevel=info
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: lsg-frontend
     ports:
       - "80:80"
+      - "5173:80" # Map Vite default port to Nginx for ease of use if needed, though running on 80
     depends_on:
       - backend
 
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=learning_space_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
 volumes:
   postgres_data:
-  storage_data:

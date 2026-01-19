@@ -12,6 +12,7 @@ class Result(Base):
     graph_storage_key = Column(String(500), nullable=False)
     num_states = Column(Integer)
     num_edges = Column(Integer)
+    algorithm = Column(String(50))
     execution_time_seconds = Column(Integer)
     result_metadata = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

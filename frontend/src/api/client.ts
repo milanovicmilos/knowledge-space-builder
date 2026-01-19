@@ -74,7 +74,7 @@ export const listResults = async (params?: {
     result_id: number; task_id: number; status: string; algorithm: string;
     created_at: string; completed_at?: string | null; upload_id: number;
     upload_filename: string; num_states?: number | null; num_edges?: number | null;
-    has_png: boolean;
+    has_png: boolean; has_ontology?: boolean;
   }>};
 };
 
