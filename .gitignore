@@ -34,6 +34,10 @@ backend/storage/
 learning_space_generator/output/
 learning_space_generator/data/
 
+# Large generated outputs
+output_*/
+*.npy
+
 # Frontend build artifacts
 frontend/dist/
 frontend/node_modules/
