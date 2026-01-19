@@ -29,13 +29,14 @@ class Settings:
     
     # IITA Settings
     IITA_THRESHOLD_RATE: float = 0.05
+    USE_CONCEPT_LEVEL_IITA: bool = True  # NEW: Run IITA on concepts, not items
     
     # JSON Generation
     MAX_STATES_LIMIT: int = 5000
     
     # Semantic Settings
     SEMANTIC_MODEL_NAME: str = "all-MiniLM-L6-v2"
-    SEMANTIC_WEIGHT: float = 0.3 # Lambda factor for regularizer settings
+    SEMANTIC_WEIGHT: float = 0.3 # Lambda factor for regularizer settings (DISABLED for concept-level IITA)
     
     # LLM & Ontology Settings
     # GitHub Models API

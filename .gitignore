@@ -29,6 +29,15 @@ optimization_log.txt
 output/
 storage_data/
 
+# Backend storage - ignore all data files
+backend/storage/
+learning_space_generator/output/
+learning_space_generator/data/
+
+# Frontend build artifacts
+frontend/dist/
+frontend/node_modules/
+
 # Docker volumes (if extracted)
 postgres_data/
 

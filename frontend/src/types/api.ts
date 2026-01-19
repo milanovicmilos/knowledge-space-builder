@@ -12,8 +12,9 @@ export interface Upload {
 export interface TaskParameters {
   // LSG Pipeline Options
   mode?: 'lsg_pipeline' | 'optimize' | 'manual';
-  iita_threshold?: number;   // Default 0.5
+  iita_threshold?: number;   // Default 0.05
   semantic_weight?: number;  // Default 0.3
+  use_concept_level_iita?: boolean; // NEW: Default true - Run IITA on latent concepts instead of items
   
   // Legacy options (kept for compatibility)
   n_trials?: number;

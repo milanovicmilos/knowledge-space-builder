@@ -17,7 +17,7 @@ logger = logging.getLogger("SOTIS-App")
 
 def main():
     parser = argparse.ArgumentParser(description="SOTIS 2026 Knowledge Space Construction Pipeline")
-    parser.add_argument('step', choices=['all', 'preprocess', 'semantic', 'extract', 'generate', 'visualize', 'validate', 'enrich'], 
+    parser.add_argument('step', choices=['all', 'preprocess', 'semantic', 'aggregate', 'extract', 'generate', 'visualize', 'validate', 'enrich'], 
                         help="Step to run (or 'all')")
     
     args = parser.parse_args()
@@ -30,9 +30,19 @@ def main():
         logger.info("=== STEP 2: Semantic Clustering (LLM + Embeddings) ===")
         from learning_space_generator.app.services.semantic_service import semantic_service
         semantic_service.run_semantic_classification()
+    
+    if args.step in ['all', 'aggregate']:
+        logger.info("=== STEP 2.5: Concept Aggregation (Items → Concepts) ===")
+        from learning_space_generator.app.services.concept_aggregation_service import concept_aggregation_service
+        from learning_space_generator.app.core.config import settings
+        concept_aggregation_service.run_aggregation_pipeline(
+            binarize=True,
+            binarize_threshold=0.5
+        )
+        logger.info("Concept aggregation completed. IITA will now run on concept-level data.")
         
     if args.step in ['all', 'extract']:
-        logger.info("=== STEP 3: Structure Extraction (Cluster-Aware IITA) ===")
+        logger.info("=== STEP 3: Structure Extraction (Concept-Level IITA) ===")
         structure_service.run_extraction()
         
     if args.step in ['all', 'generate']:

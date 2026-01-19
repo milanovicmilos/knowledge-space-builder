@@ -10,6 +10,7 @@ class TaskParameters(BaseModel):
     # LSG Options
     iita_threshold: float = 0.05
     semantic_weight: float = 0.3
+    use_concept_level_iita: bool = True  # NEW: Run IITA on concepts (aggregated by LLM), not individual items
 
     # Legacy / Compatibility
     epochs: int = 8

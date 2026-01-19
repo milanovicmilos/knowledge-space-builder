@@ -14,7 +14,15 @@ class KnowledgeSpaceService:
             return json.load(f)
 
     def load_items(self):
-         # Try loading from cleaned data for full list, fallback to implications
+        """Load items (or concepts if concept-level IITA is enabled)"""
+        # If concept-level IITA: load from aggregated_concepts_binary.csv
+        if settings.USE_CONCEPT_LEVEL_IITA:
+            concept_file = settings.OUTPUT_DIR / "aggregated_concepts_binary.csv"
+            if concept_file.exists():
+                df = pd.read_csv(concept_file)
+                return sorted(df.columns.tolist())
+        
+        # Otherwise: Try loading from cleaned data for full list, fallback to implications
         if settings.CLEANED_DATA_FILE.exists():
             df = pd.read_csv(settings.CLEANED_DATA_FILE)
             return sorted(df.columns.tolist())
@@ -38,7 +46,15 @@ class KnowledgeSpaceService:
         
         # Load student data to compute state frequency
         try:
-            student_data = pd.read_csv(settings.CLEANED_DATA_FILE)
+            # Select appropriate data file
+            if settings.USE_CONCEPT_LEVEL_IITA:
+                data_file = settings.OUTPUT_DIR / "aggregated_concepts_binary.csv"
+                logger.info(f"Loading concept-level student data from {data_file}")
+            else:
+                data_file = settings.CLEANED_DATA_FILE
+                logger.info(f"Loading item-level student data from {data_file}")
+            
+            student_data = pd.read_csv(data_file)
             student_states = []
             for _, row in student_data.iterrows():
                 state = frozenset(col for col in student_data.columns if row[col] == 1)

@@ -13,6 +13,7 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
   // Default values match local config (learning_space_generator/app/core/config.py)
   const [iitaThreshold, setIitaThreshold] = useState(0.05);
   const [semanticWeight, setSemanticWeight] = useState(0.3);
+  const [useConceptLevel, setUseConceptLevel] = useState(true); // NEW: Concept-level IITA default ON
   
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +27,8 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
       const parameters: TaskParameters = {
         mode: 'lsg_pipeline',
         iita_threshold: iitaThreshold,
-        semantic_weight: semanticWeight
+        semantic_weight: semanticWeight,
+        use_concept_level_iita: useConceptLevel // NEW parameter
       };
 
       const task = await createTask(upload.id, parameters);
@@ -78,6 +80,21 @@ export function TaskForm({ upload, onTaskCreated }: TaskFormProps) {
                 onChange={e => setSemanticWeight(parseFloat(e.target.value))}
             />
             <small>Weight for LLM/Semantic similarity regularization.</small>
+        </div>
+
+        <div className='form-group'>
+            <label>
+              <input 
+                  type='checkbox' 
+                  checked={useConceptLevel} 
+                  onChange={e => setUseConceptLevel(e.target.checked)}
+              />
+              {' '}Use Concept-Level IITA
+            </label>
+            <small>
+              Aggregate items into latent concepts (via LLM) before running IITA. 
+              Results in more stable, interpretable graph structure.
+            </small>
         </div>
 
         {error && <div className='error-message'>{error}</div>}

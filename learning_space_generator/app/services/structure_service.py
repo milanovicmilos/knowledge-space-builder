@@ -21,17 +21,22 @@ class StructureService:
         logger.info(f"Extracting implications from {n_students} students for {n_items} items (cluster_aware={cluster_aware}).")
         
         # --- Pre-calculate Semantic Similarity (ONLY for these specific items) ---
-        logger.info("Computing Semantic Matrix for Regularization (subset)...")
-        try:
-            # Calculate semantic similarity ONLY for items in this data slice
-            semantic_df = semantic_service.calculate_similarity_matrix(items)
-            use_semantics = True
-            # Only generate clusters on global run (not per-cluster)
-            if not cluster_aware:
-                semantic_service.generate_semantic_clusters(items)
-        except Exception as e:
-            logger.warning(f"Semantic analysis failed ({e}). Fallback to pure statistical IITA.")
+        # SKIP semantic similarity if running on concept-level (concept names are strings, not item IDs)
+        if settings.USE_CONCEPT_LEVEL_IITA:
+            logger.info("Concept-level IITA: Skipping semantic similarity calculation")
             use_semantics = False
+        else:
+            logger.info("Computing Semantic Matrix for Regularization (subset)...")
+            try:
+                # Calculate semantic similarity ONLY for items in this data slice
+                semantic_df = semantic_service.calculate_similarity_matrix(items)
+                use_semantics = True
+                # Only generate clusters on global run (not per-cluster)
+                if not cluster_aware:
+                    semantic_service.generate_semantic_clusters(items)
+            except Exception as e:
+                logger.warning(f"Semantic analysis failed ({e}). Fallback to pure statistical IITA.")
+                use_semantics = False
 
         X = data.values
         NotX = 1 - X
@@ -106,13 +111,33 @@ class StructureService:
 
     def run_extraction(self):
         """
-        Main IITA workflow: Load semantic clusters (if available), run IITA per-cluster + globally.
+        Main IITA workflow: 
+        - If USE_CONCEPT_LEVEL_IITA=True: Load aggregated_concepts_binary.csv
+        - Else: Load cleaned_responses.csv
         """
-        data = self.load_cleaned_data()
+        # Select appropriate data file
+        if settings.USE_CONCEPT_LEVEL_IITA:
+            concept_file = settings.OUTPUT_DIR / "aggregated_concepts_binary.csv"
+            if not concept_file.exists():
+                raise FileNotFoundError(
+                    f"{concept_file} not found. Run 'aggregate' step first when USE_CONCEPT_LEVEL_IITA=True."
+                )
+            logger.info(f"CONCEPT-LEVEL IITA: Loading {concept_file}")
+            data = pd.read_csv(concept_file)
+            logger.info(f"Loaded {data.shape[0]} students, {data.shape[1]} concepts")
+        else:
+            logger.info("ITEM-LEVEL IITA: Loading cleaned_responses.csv")
+            data = self.load_cleaned_data()
         
-        # Try to load semantic clusters from Step 2
+        # Try to load semantic clusters from Step 2 (only for item-level)
         clusters_file = settings.OUTPUT_DIR / "semantic_clusters.json"
-        if clusters_file.exists():
+        
+        # Skip per-cluster IITA for concept-level (concepts are already aggregated meaningfully)
+        if settings.USE_CONCEPT_LEVEL_IITA:
+            logger.info("Concept-level IITA: Skipping per-cluster analysis")
+            implications = self.extract_implications(data, cluster_aware=False)
+            reduced = self.reduce_graph(data.columns.tolist(), implications)
+        elif clusters_file.exists():
             logger.info("Loading semantic clusters from previous step...")
             with open(clusters_file, 'r') as f:
                 clusters = json.load(f)

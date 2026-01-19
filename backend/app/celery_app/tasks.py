@@ -24,6 +24,7 @@ from learning_space_generator.app.services.knowledge_space_service import knowle
 from learning_space_generator.app.services.visualization_service import visualization_service
 from learning_space_generator.app.services.semantic_service import semantic_service
 from learning_space_generator.app.services.ontology_service import ontology_service
+from learning_space_generator.app.services.concept_aggregation_service import concept_aggregation_service
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +77,14 @@ def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
         # Extract parameters from request (with fallbacks to defaults)
         iita_threshold = parameters.get('iita_threshold', 0.05)
         semantic_weight = parameters.get('semantic_weight', 0.3)
+        use_concept_level_iita = parameters.get('use_concept_level_iita', True)
         
-        logger.info(f"User Parameters: IITA={iita_threshold}, Semantic Weight={semantic_weight}")
+        logger.info(f"User Parameters: IITA={iita_threshold}, Semantic Weight={semantic_weight}, Concept-Level={use_concept_level_iita}")
         
         # Override settings temporarily
         lsg_settings.IITA_THRESHOLD_RATE = iita_threshold
         lsg_settings.SEMANTIC_WEIGHT = semantic_weight
+        lsg_settings.USE_CONCEPT_LEVEL_IITA = use_concept_level_iita
         lsg_settings.OUTPUT_DIR = task_output_dir
         lsg_settings.CLEANED_DATA_FILE = cleaned_file
         lsg_settings.IMPLICATIONS_FILE = implications_file
@@ -113,10 +116,27 @@ def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
             from learning_space_generator.app.services.semantic_service import semantic_service as lsg_semantic
             lsg_semantic.run_semantic_classification()
             
-            # 3. Structure Extraction
+            # 2b. Concept Aggregation (NEW!) - only if concept-level IITA is enabled
+            if use_concept_level_iita:
+                self.update_state(state="PROGRESS", meta={"progress_percent": 35, "stage": "aggregation"})
+                task.progress_percent = 35
+                task.progress_details = {"stage": "aggregation", "detail": "Aggregating Items to Concepts"}
+                db.commit()
+                
+                from learning_space_generator.app.services.concept_aggregation_service import concept_aggregation_service
+                aggregated_file = concept_aggregation_service.run_aggregation_pipeline(
+                    classifications_file=task_output_dir / "llm_item_classifications.json",
+                    data_file=cleaned_file,
+                    output_file=task_output_dir / "aggregated_concepts.csv",
+                    binarize=True,  # Use binary mastery (>= 0.5 = mastered)
+                    binarize_threshold=0.5
+                )
+                logger.info(f"Concept aggregation complete: {aggregated_file}")
+            
+            # 3. Structure Extraction (concept-level if enabled, otherwise item-level)
             self.update_state(state="PROGRESS", meta={"progress_percent": 40, "stage": "extraction"})
             task.progress_percent = 40
-            task.progress_details = {"stage": "extraction", "detail": "Running IITA"}
+            task.progress_details = {"stage": "extraction", "detail": "Running IITA on Concepts"}
             db.commit()
             
             structure_service.run_extraction()
