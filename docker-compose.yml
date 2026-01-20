@@ -7,13 +7,15 @@ services:
       dockerfile: ./backend/Dockerfile
     volumes:
       - ./backend/app:/app/app
-      - ./backend/storage:/app/storage
+      - ./storage:/app/storage
       - ./learning_space_generator:/app/learning_space_generator
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/learning_space_db
       - REDIS_URL=redis://redis:6379/0
       - STORAGE_PATH=/app/storage
-      - STORAGE_TYPE=local
+      - UPLOAD_PATH=/app/storage/uploads
+      - LSG_PATH=/app/learning_space_generator
+      - LSG_OUTPUT_PATH=/app/learning_space_generator/output
       - CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost,http://localhost:80
     ports:
       - "8000:8000"
@@ -25,15 +27,17 @@ services:
   celery_worker:
     build: 
       context: .
-      dockerfile: ./backend/Dockerfile
+      dockerfile: ./backend/Dockerfile.worker
     volumes:
       - ./backend/app:/app/app
-      - ./backend/storage:/app/storage
+      - ./storage:/app/storage
       - ./learning_space_generator:/app/learning_space_generator
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/learning_space_db
       - REDIS_URL=redis://redis:6379/0
       - STORAGE_PATH=/app/storage
+      - LSG_PATH=/app/learning_space_generator
+      - LSG_OUTPUT_PATH=/app/learning_space_generator/output
     depends_on:
       - backend
       - redis
@@ -46,7 +50,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "80:80"
-      - "5173:80" # Map Vite default port to Nginx for ease of use if needed, though running on 80
+      - "5173:80"
     depends_on:
       - backend
 
@@ -68,3 +72,6 @@ services:
 
 volumes:
   postgres_data:
+  storage_data:
+
+

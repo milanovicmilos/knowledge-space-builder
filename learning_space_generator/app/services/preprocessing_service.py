@@ -7,6 +7,11 @@ from torch.utils.data import DataLoader, TensorDataset
 from learning_space_generator.app.core.config import settings
 from learning_space_generator.app.models.dae import DenoisingAutoencoder
 import logging
+import os
+
+# Force CPU-only mode (no CUDA)
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
+torch.cuda.is_available = lambda: False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,11 +50,12 @@ class PreprocessingService:
         input_dim = data_matrix.shape[1]
         hidden_dim = max(input_dim // 2, 1) # Ensure at least 1
         
-        model = DenoisingAutoencoder(input_dim, hidden_dim)
+        device = torch.device('cpu')  # Explicitly use CPU
+        model = DenoisingAutoencoder(input_dim, hidden_dim).to(device)
         optimizer = optim.Adam(model.parameters(), lr=settings.DAE_LEARNING_RATE)
         criterion = nn.BCELoss()
 
-        tensor_data = torch.FloatTensor(data_matrix.values)
+        tensor_data = torch.FloatTensor(data_matrix.values).to(device)
         dataset = TensorDataset(tensor_data, tensor_data)
         dataloader = DataLoader(dataset, batch_size=settings.DAE_BATCH_SIZE, shuffle=True)
 
@@ -78,11 +84,13 @@ class PreprocessingService:
 
     def denoise_data(self, model: DenoisingAutoencoder, data: pd.DataFrame, threshold: float = 0.5) -> pd.DataFrame:
         logger.info("Denoising data...")
+        device = torch.device('cpu')  # Explicitly use CPU
+        model.to(device)
         model.eval()
         with torch.no_grad():
-            tensor_data = torch.FloatTensor(data.values)
+            tensor_data = torch.FloatTensor(data.values).to(device)
             reconstructed = model(tensor_data)
-            cleaned_vals = (reconstructed > threshold).int().numpy()
+            cleaned_vals = (reconstructed > threshold).int().cpu().numpy()
             
         return pd.DataFrame(cleaned_vals, columns=data.columns, index=data.index)
 

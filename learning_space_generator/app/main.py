@@ -1,5 +1,12 @@
 import argparse
 import sys
+import os
+import torch
+
+# Force CPU-only mode (no CUDA)
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
+torch.cuda.is_available = lambda: False
+
 from learning_space_generator.app.services.preprocessing_service import preprocessing_service
 from learning_space_generator.app.services.structure_service import structure_service
 from learning_space_generator.app.services.knowledge_space_service import knowledge_space_service
@@ -17,7 +24,7 @@ logger = logging.getLogger("SOTIS-App")
 
 def main():
     parser = argparse.ArgumentParser(description="SOTIS 2026 Knowledge Space Construction Pipeline")
-    parser.add_argument('step', choices=['all', 'preprocess', 'semantic', 'aggregate', 'extract', 'generate', 'visualize', 'validate', 'enrich'], 
+    parser.add_argument('step', choices=['all', 'preprocess', 'semantic', 'aggregate', 'difficulty', 'extract', 'generate', 'visualize', 'validate', 'enrich'], 
                         help="Step to run (or 'all')")
     
     args = parser.parse_args()
@@ -40,6 +47,13 @@ def main():
             binarize_threshold=0.5
         )
         logger.info("Concept aggregation completed. IITA will now run on concept-level data.")
+    
+    if args.step in ['all', 'difficulty']:
+        logger.info("=== STEP 2.6: Difficulty Analysis (Sort Items by Difficulty) ===")
+        from learning_space_generator.app.services.difficulty_service import DifficultyService
+        difficulty_service = DifficultyService()
+        difficulty_service.run_difficulty_analysis()
+        logger.info("Difficulty analysis completed. Items sorted within each concept.")
         
     if args.step in ['all', 'extract']:
         logger.info("=== STEP 3: Structure Extraction (Concept-Level IITA) ===")

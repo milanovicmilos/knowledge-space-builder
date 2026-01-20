@@ -125,34 +125,6 @@ class ConceptAggregationService:
         
         return aggregated_df, self.concept_to_items
     
-    def sort_items_by_difficulty(self, data_file: Path) -> None:
-        """
-        Sorts items in self.concept_to_items by difficulty.
-        Difficulty = Success Rate (mean of 0/1 responses).
-        Sort Order: Descending difficulty (Higher success rate -> Easiest first).
-        """
-        logger.info(f"Calculating item difficulty from {data_file}")
-        try:
-            df = pd.read_csv(data_file)
-            
-            # Calculate difficulty (mean of 0/1 responses)
-            # Higher mean = Easier
-            item_difficulty = {}
-            for col in df.columns:
-                if col in self.item_to_concept: # Only process items
-                    # fillna(0) is important if sparse
-                    item_difficulty[col] = df[col].fillna(0).mean()
-            
-            # Sort each concept's items
-            for concept, items in self.concept_to_items.items():
-                # Sort Descending of mean value (Easiest first)
-                sorted_items = sorted(items, key=lambda x: item_difficulty.get(x, 0), reverse=True)
-                self.concept_to_items[concept] = sorted_items
-                
-            logger.info("Sorted items within concepts by difficulty (Easiest -> Hardest)")
-        except Exception as e:
-            logger.error(f"Failed to calculate difficulty: {e}")
-    
     def binarize_concepts(
         self,
         aggregated_df: pd.DataFrame,
@@ -208,9 +180,6 @@ class ConceptAggregationService:
         
         # Load classifications
         self.load_item_classifications(classifications_file)
-        
-        # Sort items by difficulty before aggregation
-        self.sort_items_by_difficulty(data_file)
         
         # Aggregate
         aggregated_df, concept_mapping = self.aggregate_to_concepts(data_file, output_file)

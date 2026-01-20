@@ -1,219 +1,216 @@
-import sys
-import os
-import time
-import json
-import logging
-import tempfile
-from pathlib import Path
-from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+"""
+Celery Tasks - Pokreće Learning Space Generator
 
+Ovaj task je **most** između backend-a i learning_space_generator-a.
+"""
+
+import subprocess
+import json
+import shutil
+from pathlib import Path
+from datetime import datetime
+from celery import Task
 from app.celery_app import celery_app
-from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models.task import Task as TaskModel
-from app.models.upload import Upload
 from app.models.result import Result
-from app.services.storage import storage_service
+from app import models  # Ensure all tables registered in metadata
 from app.config import settings
 
-# Import LSG Services from the actual algorithm package
-from learning_space_generator.app.services.preprocessing_service import preprocessing_service
-from learning_space_generator.app.services.structure_service import structure_service
-from learning_space_generator.app.services.knowledge_space_service import knowledge_space_service
-from learning_space_generator.app.services.visualization_service import visualization_service
-from learning_space_generator.app.services.semantic_service import semantic_service
-from learning_space_generator.app.services.ontology_service import ontology_service
-from learning_space_generator.app.services.concept_aggregation_service import concept_aggregation_service
 
-logger = logging.getLogger(__name__)
+class DatabaseTask(Task):
+    """Custom Celery task sa database session"""
+    _db = None
 
-@celery_app.task(bind=True)
-def run_algorithm_task(self, task_id: int, upload_id: int, parameters: dict):
-    db: Session = SessionLocal()
+    @property
+    def db(self):
+        if self._db is None:
+            self._db = SessionLocal()
+        return self._db
+
+
+@celery_app.task(base=DatabaseTask, bind=True)
+def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: str):
+    """
+    Pokreće learning_space_generator kao subproces i čuva rezultate u bazu
+    
+    Workflow:
+    1. Kopiraj CSV u learning_space_generator/data/
+    2. Pokreni learning_space_generator subprocess
+    3. Parsiruj output i ažuriraj progress u bazi
+    4. Sačekaj završetak
+    5. Učitaj rezultate iz learning_space_generator/output/
+    6. Sačuvaj rezultate u PostgreSQL
+    """
+    
+    db = self.db
     
     try:
-        # Load Task
+        # Pronađi task u bazi
         task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
         if not task:
-            logger.error(f"Task {task_id} not found")
-            return
-
+            raise ValueError(f"Task {task_id} not found")
+        
+        # Update task status
         task.status = "running"
-        task.started_at = datetime.now(timezone.utc)
-        task.progress_percent = 0
-        task.progress_details = {"stage": "initializing", "progress_percent": 0}
+        task.started_at = datetime.now()
+        task.message = "Pripremanje podataka..."
+        task.progress = 5
         db.commit()
         
-        # Load Upload
-        upload = db.query(Upload).filter(Upload.id == upload_id).first()
-        if not upload:
-            raise ValueError(f"Upload {upload_id} not found")
-            
-        csv_path = storage_service.get_file_path(upload.storage_key)
-        # Ensure path exists or resolve it relative to storage_path
-        if not os.path.exists(csv_path):
-             csv_path = str(Path(settings.STORAGE_PATH) / upload.storage_key)
-             
-        if not os.path.exists(csv_path):
-             raise FileNotFoundError(f"CSV file not found at {csv_path}")
-
-        # Setup Task Storage
-        # usage: /app/storage/outputs/task_<id>/
-        task_output_dir = Path(settings.OUTPUT_DIR) / f"task_{task_id}"
-        task_output_dir.mkdir(parents=True, exist_ok=True)
+        # Pripremi putanje
+        lsg_path = Path(settings.LSG_PATH)
+        lsg_data_path = lsg_path / "data"
+        lsg_output_path = Path(settings.LSG_OUTPUT_PATH)
         
-        # Define File Paths
-        cleaned_file = task_output_dir / "cleaned.csv"
-        implications_file = task_output_dir / "implications.json"
-        knowledge_space_file = task_output_dir / "knowledge_space.json"
-        graph_image_file = task_output_dir / "graph.png"
-        semantic_clusters_file = task_output_dir / "semantic_clusters.json"
-        ontology_file = task_output_dir / "sotis_ontology.ttl"
+        # Kreiraj direktorijume ako ne postoje
+        lsg_data_path.mkdir(parents=True, exist_ok=True)
+        lsg_output_path.mkdir(parents=True, exist_ok=True)
         
-        # Override LSG settings with user-provided parameters
-        from learning_space_generator.app.core.config import settings as lsg_settings
+        # Kopiraj CSV u LSG data folder
+        csv_filename = "uploaded_data.csv"
+        target_csv = lsg_data_path / csv_filename
+        shutil.copy(csv_path, target_csv)
         
-        # Extract parameters from request (with fallbacks to defaults)
-        iita_threshold = parameters.get('iita_threshold', 0.05)
-        semantic_weight = parameters.get('semantic_weight', 0.3)
-        use_concept_level_iita = parameters.get('use_concept_level_iita', True)
+        task.message = "Pokre ćem Learning Space Generator..."
+        task.progress = 10
+        db.commit()
         
-        logger.info(f"User Parameters: IITA={iita_threshold}, Semantic Weight={semantic_weight}, Concept-Level={use_concept_level_iita}")
+        # Pokreni learning_space_generator
+        # Koristimo Python iz virtualnog okruženja LSG-a
+        venv_python = lsg_path / ".venv" / "bin" / "python" if (lsg_path / ".venv" / "bin").exists() else "python"
+        script = lsg_path / settings.LSG_SCRIPT
         
-        # Override settings temporarily
-        lsg_settings.IITA_THRESHOLD_RATE = iita_threshold
-        lsg_settings.SEMANTIC_WEIGHT = semantic_weight
-        lsg_settings.USE_CONCEPT_LEVEL_IITA = use_concept_level_iita
-        lsg_settings.OUTPUT_DIR = task_output_dir
-        lsg_settings.CLEANED_DATA_FILE = cleaned_file
-        lsg_settings.IMPLICATIONS_FILE = implications_file
-        lsg_settings.KNOWLEDGE_SPACE_FILE = knowledge_space_file
-        lsg_settings.GRAPH_IMAGE_FILE = graph_image_file
+        process = subprocess.Popen(
+            [str(venv_python), str(script), "all"],
+            cwd=str(lsg_path),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
+        )
         
-        # Pipeline Execution
-        try:
-            # 1. Preprocessing
-            self.update_state(state="PROGRESS", meta={"progress_percent": 10, "stage": "preprocessing"})
-            task.progress_percent = 10
-            task.progress_details = {"stage": "preprocessing", "detail": "Cleaning data & DAE"}
-            db.commit()
+        # Parsiranje output-a za progress
+        for line in process.stdout:
+            lower_line = line.lower()
             
-            # Copy input CSV to LSG's expected location
-            import shutil
-            shutil.copy(csv_path, cleaned_file)
-            logger.info(f"Input CSV copied to {cleaned_file} for LSG processing")
-            
-            # Run preprocessing (DAE denoising)
-            preprocessing_service.run_preprocessing()
-            
-            # 2. Semantic Analysis
-            self.update_state(state="PROGRESS", meta={"progress_percent": 25, "stage": "semantic"})
-            task.progress_percent = 25
-            task.progress_details = {"stage": "semantic", "detail": "Clustering Concepts"}
-            db.commit()
-
-            from learning_space_generator.app.services.semantic_service import semantic_service as lsg_semantic
-            lsg_semantic.run_semantic_classification()
-            
-            # 2b. Concept Aggregation (NEW!) - only if concept-level IITA is enabled
-            if use_concept_level_iita:
-                self.update_state(state="PROGRESS", meta={"progress_percent": 35, "stage": "aggregation"})
-                task.progress_percent = 35
-                task.progress_details = {"stage": "aggregation", "detail": "Aggregating Items to Concepts"}
-                db.commit()
-                
-                from learning_space_generator.app.services.concept_aggregation_service import concept_aggregation_service
-                aggregated_file = concept_aggregation_service.run_aggregation_pipeline(
-                    classifications_file=task_output_dir / "llm_item_classifications.json",
-                    data_file=cleaned_file,
-                    output_file=task_output_dir / "aggregated_concepts.csv",
-                    binarize=True,  # Use binary mastery (>= 0.5 = mastered)
-                    binarize_threshold=0.5
-                )
-                logger.info(f"Concept aggregation complete: {aggregated_file}")
-            
-            # 3. Structure Extraction (concept-level if enabled, otherwise item-level)
-            self.update_state(state="PROGRESS", meta={"progress_percent": 40, "stage": "extraction"})
-            task.progress_percent = 40
-            task.progress_details = {"stage": "extraction", "detail": "Running IITA on Concepts"}
-            db.commit()
-            
-            structure_service.run_extraction()
-            
-            # 4. Knowledge Space Generation
-            self.update_state(state="PROGRESS", meta={"progress_percent": 60, "stage": "generation"})
-            task.progress_percent = 60
-            task.progress_details = {"stage": "generation", "detail": "Generating States"}
-            db.commit()
-            
-            knowledge_space_service.generate_states()
-            
-            # 5. Visualization
-            self.update_state(state="PROGRESS", meta={"progress_percent": 80, "stage": "visualization"})
-            task.progress_percent = 80
-            task.progress_details = {"stage": "visualization", "detail": "Creating Graph"}
-            db.commit()
-            
-            visualization_service.generate_static_graph()
-
-            # 6. Ontology Generation
-            self.update_state(state="PROGRESS", meta={"progress_percent": 95, "stage": "ontology"})
-            task.progress_details = {"stage": "ontology", "detail": "Exporting Ontology"}
-            db.commit()
-
-            ontology_service.generate_ontology()
-            
-            # Result Saving
-            # Calculate num_states/edges
-            with open(knowledge_space_file, "r") as f:
-                ks = json.load(f)
-                num_states = len(ks)
-            
-            with open(implications_file, "r") as f:
-                imps = json.load(f)
-                num_edges = len(imps)
-
-            # Store result
-            # We use knowledge_space.json as the main artifact key, but we can store others in metadata
-            result = Result(
-                task_id=task_id,
-                graph_storage_key=str(knowledge_space_file.relative_to(Path(settings.STORAGE_PATH))), # Store relative path
-                num_states=num_states,
-                num_edges=num_edges,
-                algorithm="lsg_pipeline",
-                execution_time_seconds=int((datetime.now(timezone.utc) - task.started_at).total_seconds()),
-                result_metadata={
-                    "implications_file": str(implications_file.relative_to(Path(settings.STORAGE_PATH))),
-                    "cleaned_file": str(cleaned_file.relative_to(Path(settings.STORAGE_PATH))),
-                    "png_key": str(graph_image_file.relative_to(Path(settings.STORAGE_PATH))),
-                    "ontology_file": str(ontology_file.relative_to(Path(settings.STORAGE_PATH))),
-                    "semantic_clusters_file": str(semantic_clusters_file.relative_to(Path(settings.STORAGE_PATH)))
-                }
-            )
-            db.add(result)
-            
-            task.status = "completed"
-            task.completed_at = datetime.now(timezone.utc)
-            task.progress_percent = 100
-            task.progress_details = {"stage": "finished", "detail": "Done"}
+            if "preprocessing" in lower_line:
+                task.progress = 15
+                task.message = "DAE preprocessing..."
+            elif "llm" in lower_line or "classification" in lower_line:
+                task.progress = 25
+                task.message = "LLM classification..."
+            elif "semantic" in lower_line or "cluster" in lower_line:
+                task.progress = 35
+                task.message = "Semantic clustering..."
+            elif "aggregation" in lower_line:
+                task.progress = 45
+                task.message = "Concept aggregation..."
+            elif "difficulty" in lower_line:
+                task.progress = 55
+                task.message = "Difficulty analysis..."
+            elif "iita" in lower_line or "extraction" in lower_line:
+                task.progress = 65
+                task.message = "IITA prerequisite extraction..."
+            elif "knowledge" in lower_line or "space" in lower_line:
+                task.progress = 75
+                task.message = "Knowledge space generation..."
+            elif "visualization" in lower_line or "graph" in lower_line:
+                task.progress = 85
+                task.message = "Visualization..."
+            elif "ontology" in lower_line or "rdf" in lower_line:
+                task.progress = 90
+                task.message = "RDF/TTL ontology export..."
             
             db.commit()
-            
-        except Exception as e:
-            logger.exception("Task failed pipeline execution")
-            raise e
-            
+        
+        # Sačekaj završetak
+        return_code = process.wait()
+        
+        if return_code != 0:
+            stderr_output = process.stderr.read() if process.stderr else "Unknown error"
+            raise RuntimeError(f"Learning Space Generator failed: {stderr_output}")
+        
+        task.message = "Čuvanje rezultata u bazu..."
+        task.progress = 95
+        db.commit()
+        
+        # Učitaj rezultate iz output foldera
+        statistics = {}
+        result_files = {}
+        
+        # Load statistics from JSON files
+        if (lsg_output_path / "llm_item_classifications.json").exists():
+            with open(lsg_output_path / "llm_item_classifications.json", 'r') as f:
+                llm_data = json.load(f)
+                statistics["total_items"] = len(llm_data)
+                statistics["total_concepts"] = len(set(llm_data.values()))
+        
+        if (lsg_output_path / "knowledge_space.json").exists():
+            with open(lsg_output_path / "knowledge_space.json", 'r') as f:
+                ks_data = json.load(f)
+                statistics["knowledge_space_states"] = len(ks_data)
+        
+        if (lsg_output_path / "implications.json").exists():
+            with open(lsg_output_path / "implications.json", 'r') as f:
+                impl_data = json.load(f)
+                statistics["prerequisites_found"] = len(impl_data)
+        
+        if (lsg_output_path / "semantic_clusters.json").exists():
+            with open(lsg_output_path / "semantic_clusters.json", 'r') as f:
+                sem_data = json.load(f)
+                statistics["semantic_clusters"] = len(sem_data)
+        
+        if (lsg_output_path / "aggregated_concepts.csv").exists():
+            with open(lsg_output_path / "aggregated_concepts.csv", 'r') as f:
+                lines = f.readlines()
+                if len(lines) > 1:
+                    statistics["total_students"] = len(lines) - 1
+        
+        # Index all result files
+        for file_path in lsg_output_path.glob("*"):
+            if file_path.is_file():
+                result_files[file_path.name] = str(file_path)
+        
+        # Sačuvaj rezultate u bazu
+        result = Result(
+            task_id=task_id,
+            total_items=statistics.get("total_items", 0),
+            total_concepts=statistics.get("total_concepts", 0),
+            total_students=statistics.get("total_students", 0),
+            knowledge_space_states=statistics.get("knowledge_space_states", 0),
+            prerequisites_found=statistics.get("prerequisites_found", 0),
+            semantic_clusters=statistics.get("semantic_clusters", 0),
+            root_concepts=statistics.get("root_concepts", 0),
+            result_files=result_files
+        )
+        db.add(result)
+        
+        # Označi task kao completed
+        task.status = "completed"
+        task.completed_at = datetime.now()
+        task.progress = 100
+        task.message = "Analysis completed successfully!"
+        db.commit()
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "statistics": statistics
+        }
+    
     except Exception as e:
-        logger.exception(f"Error in run_algorithm_task: {e}")
-        task.status = "failed"
-        task.error_message = str(e)
-        task.completed_at = datetime.now(timezone.utc)
-        db.commit()
-        raise e
+        # Označi task kao failed
+        task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+        if task:
+            task.status = "failed"
+            task.completed_at = datetime.now()
+            task.error_message = str(e)
+            task.message = f"Error: {str(e)}"
+            db.commit()
+        
+        raise
+    
     finally:
         db.close()
-
-def parse_progress_line(line: str) -> Optional[Dict[str, Any]]:
-    return None
 

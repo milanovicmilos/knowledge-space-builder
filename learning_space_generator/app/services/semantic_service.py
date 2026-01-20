@@ -20,7 +20,8 @@ class SemanticService:
     def load_model(self):
         if self.model is None:
             logger.info(f"Loading Semantic Model: {settings.SEMANTIC_MODEL_NAME}...")
-            self.model = SentenceTransformer(settings.SEMANTIC_MODEL_NAME)
+            # Explicitly force CPU to avoid any CUDA dependencies on non-GPU machines
+            self.model = SentenceTransformer(settings.SEMANTIC_MODEL_NAME, device='cpu')
             
     def extract_item_texts(self, items: list) -> dict:
         """

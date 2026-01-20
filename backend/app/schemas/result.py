@@ -1,43 +1,42 @@
-from pydantic import BaseModel
+"""
+Result Pydantic schemas
+"""
+
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Optional, Dict, Any
+from pydantic import BaseModel, ConfigDict
 
 
-class ResultResponse(BaseModel):
-    id: int
+class ResultBase(BaseModel):
     task_id: int
-    graph_storage_key: str
-    num_states: int | None
-    num_edges: int | None
-    num_relations: int | None
-    discrepancy: float | None
-    is_valid: bool | None
-    algorithm: str
-    final_generation: int | None
-    execution_time_seconds: int | None
-    result_metadata: Dict[str, Any] | None
-    created_at: datetime
-    learning_space: Dict[str, Any] | None = None  # ADD: learning space data from storage
+    total_items: int = 0
+    total_concepts: int = 0
+    total_students: int = 0
+    knowledge_space_states: int = 0
+    prerequisites_found: int = 0
+    semantic_clusters: int = 0
+    root_concepts: int = 0
+
+
+class ResultCreate(ResultBase):
+    result_files: Dict[str, str] = {}
+
+
+class ResultStatistics(BaseModel):
+    total_items: int
+    total_concepts: int
+    total_students: int
+    knowledge_space_states: int
+    prerequisites_found: int
+    semantic_clusters: int
+    root_concepts: int
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
-class ResultListItem(BaseModel):
-    result_id: int
-    task_id: int
-    status: str
-    algorithm: str
+class ResultResponse(ResultBase):
+    id: int
+    result_files: Dict[str, Any] = {}
     created_at: datetime
-    completed_at: Optional[datetime] = None
-    upload_id: int
-    upload_filename: str
-    num_states: int | None = None
-    num_edges: int | None = None
-    has_png: bool = False
-    has_ontology: bool = False
-
-
-class ResultsListResponse(BaseModel):
-    total: int
-    items: List[ResultListItem]
+    
+    model_config = ConfigDict(from_attributes=True)

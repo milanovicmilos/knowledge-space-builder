@@ -1,26 +1,25 @@
-from pydantic import BaseModel
+"""
+Upload Pydantic schemas
+"""
+
 from datetime import datetime
+from pydantic import BaseModel, ConfigDict
 
 
 class UploadBase(BaseModel):
     filename: str
-    original_filename: str
+    storage_key: str
+    file_size_bytes: int
+    num_rows: int = 0
+    num_columns: int = 0
 
 
 class UploadCreate(UploadBase):
-    storage_key: str
-    file_size_bytes: int
-    num_rows: int | None = None
-    num_columns: int | None = None
+    pass
 
 
 class UploadResponse(UploadBase):
     id: int
-    storage_key: str
-    file_size_bytes: int
-    num_rows: int | None
-    num_columns: int | None
     uploaded_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

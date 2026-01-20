@@ -1,5 +1,10 @@
-from app.models.upload import Upload
-from app.models.task import Task
-from app.models.result import Result
+"""SQLAlchemy models package.
 
-__all__ = ["Upload", "Task", "Result"]
+Ensure all model modules are imported so their tables
+are registered in Base.metadata for migrations and create_all.
+"""
+
+# Import model modules to register tables
+from .upload import Upload  # noqa: F401
+from .task import Task  # noqa: F401
+from .result import Result  # noqa: F401

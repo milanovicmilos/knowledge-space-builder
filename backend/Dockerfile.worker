@@ -1,0 +1,26 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy backend requirements (for Celery client & DB)
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend application
+COPY backend/ .
+
+# Copy learning_space_generator and install its dependencies
+COPY learning_space_generator /app/learning_space_generator
+RUN if [ -f "/app/learning_space_generator/requirements.txt" ]; then \
+    pip install --no-cache-dir -r /app/learning_space_generator/requirements.txt; \
+    fi
+
+# Create storage directories
+RUN mkdir -p /app/storage/uploads
+RUN mkdir -p /app/learning_space_generator/output
+RUN mkdir -p /app/learning_space_generator/data
+
+# Set Python path
+ENV PYTHONPATH=/app:/app/learning_space_generator
+
+CMD ["celery", "-A", "app.celery_app.celery_app", "worker", "--loglevel=info"]

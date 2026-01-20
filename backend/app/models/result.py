@@ -1,18 +1,24 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, BigInteger
 from sqlalchemy.sql import func
 from app.database import Base
 
 
 class Result(Base):
     __tablename__ = "results"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    task_id = Column(Integer, ForeignKey("tasks.id"), unique=True, nullable=False)
-    graph_storage_key = Column(String(500), nullable=False)
-    num_states = Column(Integer)
-    num_edges = Column(Integer)
-    algorithm = Column(String(50))
-    execution_time_seconds = Column(Integer)
-    result_metadata = Column(JSONB)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False)
+    
+    # Statistics
+    total_items = Column(Integer)
+    total_concepts = Column(Integer)
+    total_students = Column(Integer)
+    knowledge_space_states = Column(Integer)
+    prerequisites_found = Column(Integer)
+    semantic_clusters = Column(Integer)
+    root_concepts = Column(Integer)
+    
+    # Storage keys za fajlove
+    result_files = Column(JSON)  # {filename: storage_path}
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
