@@ -38,11 +38,19 @@ class PreprocessingService:
 
         data = df[item_cols].copy()
 
-        # Cleaning missing/invalid codes
-        data.replace({9999: 0, 666: 0}, inplace=True)
-        # Binarize
-        # Using map instead of applymap (future warning fix)
-        data = data.map(lambda x: 1 if x == 1 else 0)
+        # Handle missing/invalid codes properly
+        # 9999 = question not in student's test booklet (missing by design)
+        # 666 = invalid/unclear response
+        # Both should be NaN, NOT 0 (zero means "answered incorrectly")
+        data.replace({9999: np.nan, 666: np.nan}, inplace=True)
+        
+        # Binarize: keep only 1 (correct) and 0 (incorrect)
+        # NaN values will remain as NaN
+        data = data.map(lambda x: 1 if x == 1 else (0 if x == 0 else np.nan))
+        
+        logger.info(f"Data shape: {data.shape}")
+        coverage = data.notna().sum().sum() / data.size
+        logger.info(f"Coverage: {coverage:.1%} of responses observed (rest are missing by design)")
         
         return data, item_cols
 
@@ -50,28 +58,39 @@ class PreprocessingService:
         input_dim = data_matrix.shape[1]
         hidden_dim = max(input_dim // 2, 1) # Ensure at least 1
         
+        # Fill NaN with 0 for DAE training (will use mask to ignore them in loss)
+        data_filled = data_matrix.fillna(0)
+        mask = data_matrix.notna().astype(float)  # 1 where observed, 0 where NaN
+        
         device = torch.device('cpu')  # Explicitly use CPU
         model = DenoisingAutoencoder(input_dim, hidden_dim).to(device)
         optimizer = optim.Adam(model.parameters(), lr=settings.DAE_LEARNING_RATE)
-        criterion = nn.BCELoss()
+        criterion = nn.BCELoss(reduction='none')  # Per-element loss for masking
 
-        tensor_data = torch.FloatTensor(data_matrix.values).to(device)
-        dataset = TensorDataset(tensor_data, tensor_data)
+        tensor_data = torch.FloatTensor(data_filled.values).to(device)
+        tensor_mask = torch.FloatTensor(mask.values).to(device)
+        dataset = TensorDataset(tensor_data, tensor_data, tensor_mask)
         dataloader = DataLoader(dataset, batch_size=settings.DAE_BATCH_SIZE, shuffle=True)
 
         logger.info(f"Training DAE for {settings.DAE_EPOCHS} epochs...")
+        logger.info(f"Using masking to handle missing data (NaN values)")
         model.train()
         
         for epoch in range(settings.DAE_EPOCHS):
             total_loss = 0
-            for batch_features, _ in dataloader:
-                # Add noise
-                mask = (torch.rand_like(batch_features) > settings.DAE_NOISE_FACTOR).float()
-                noisy_inputs = batch_features * mask
+            for batch_features, batch_targets, batch_mask in dataloader:
+                # Add noise (only to observed values)
+                noise_mask = (torch.rand_like(batch_features) > settings.DAE_NOISE_FACTOR).float()
+                noisy_inputs = batch_features * noise_mask
                 
                 optimizer.zero_grad()
                 outputs = model(noisy_inputs)
-                loss = criterion(outputs, batch_features)
+                
+                # Calculate loss only on observed values
+                element_loss = criterion(outputs, batch_targets)
+                masked_loss = element_loss * batch_mask
+                loss = masked_loss.sum() / batch_mask.sum()  # Average over observed values
+                
                 loss.backward()
                 optimizer.step()
                 total_loss += loss.item()
@@ -87,12 +106,21 @@ class PreprocessingService:
         device = torch.device('cpu')  # Explicitly use CPU
         model.to(device)
         model.eval()
+        
+        # Fill NaN with 0 for forward pass
+        data_filled = data.fillna(0)
+        original_mask = data.notna()
+        
         with torch.no_grad():
-            tensor_data = torch.FloatTensor(data.values).to(device)
+            tensor_data = torch.FloatTensor(data_filled.values).to(device)
             reconstructed = model(tensor_data)
             cleaned_vals = (reconstructed > threshold).int().cpu().numpy()
-            
-        return pd.DataFrame(cleaned_vals, columns=data.columns, index=data.index)
+        
+        # Restore NaN values where they were originally
+        cleaned_df = pd.DataFrame(cleaned_vals, columns=data.columns, index=data.index, dtype=float)
+        cleaned_df[~original_mask] = np.nan
+        
+        return cleaned_df
 
     def run_preprocessing(self):
         # High level orchestration

@@ -93,13 +93,21 @@ class ConceptAggregationService:
                 
                 if not concept_items:
                     # No items for this concept in current data
-                    student_mastery[concept] = 0.0
+                    student_mastery[concept] = np.nan  # Changed: NaN instead of 0
                     continue
                 
-                # Calculate mastery: mean of responses (handling NaN as 0)
-                responses = row[concept_items].fillna(0).values
-                mastery_score = np.mean(responses)
-                student_mastery[concept] = mastery_score
+                # Calculate mastery: mean of OBSERVED responses only (ignore NaN)
+                # NaN means student didn't answer ANY question for this concept
+                responses = row[concept_items].values
+                observed_responses = responses[~pd.isna(responses)]
+                
+                if len(observed_responses) == 0:
+                    # Student didn't answer any question for this concept
+                    student_mastery[concept] = np.nan
+                else:
+                    # Average only observed responses
+                    mastery_score = np.mean(observed_responses)
+                    student_mastery[concept] = mastery_score
             
             aggregated_data.append(student_mastery)
         

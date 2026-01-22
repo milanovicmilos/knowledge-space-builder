@@ -38,13 +38,44 @@ class StructureService:
                 logger.warning(f"Semantic analysis failed ({e}). Fallback to pure statistical IITA.")
                 use_semantics = False
 
+        # Handle NaN values: only count pairs where BOTH items are observed
         X = data.values
-        NotX = 1 - X
-        # B[i, j] = count of (0, 1) pattern for i -> j
-        B = np.dot(NotX.T, X)
-        np.fill_diagonal(B, n_students) # Ignore self-loops
-
-        base_threshold = n_students * settings.IITA_THRESHOLD_RATE
+        
+        # For each pair (i,j), compute counter-examples considering only observed responses
+        n_items_actual = len(items)
+        B = np.zeros((n_items_actual, n_items_actual))
+        valid_counts = np.zeros((n_items_actual, n_items_actual))  # How many students answered both
+        
+        for i in range(n_items_actual):
+            for j in range(n_items_actual):
+                if i == j:
+                    continue
+                
+                # Get responses for both items
+                item_i = X[:, i]
+                item_j = X[:, j]
+                
+                # Mask: both items observed (not NaN)
+                valid_mask = ~(np.isnan(item_i) | np.isnan(item_j))
+                n_valid = valid_mask.sum()
+                valid_counts[i, j] = n_valid
+                
+                if n_valid < 10:  # Minimum sample size
+                    B[i, j] = n_students  # High value = reject implication
+                    continue
+                
+                # Count counter-examples: has i (1) but NOT j (0)
+                # For i → j: counter-example is (1, 0)
+                has_i = (item_i[valid_mask] == 1)
+                not_has_j = (item_j[valid_mask] == 0)
+                counter_examples = (has_i & not_has_j).sum()
+                
+                B[i, j] = counter_examples
+        
+        # Calculate threshold based on AVERAGE sample size (not total students)
+        avg_sample_size = valid_counts[valid_counts > 0].mean()
+        logger.info(f"Average sample size per pair: {avg_sample_size:.1f} (out of {n_students} total students)")
+        base_threshold = avg_sample_size * settings.IITA_THRESHOLD_RATE
         logger.info(f"Base Threshold: {base_threshold} ({settings.IITA_THRESHOLD_RATE*100}%)")
         logger.info(f"Semantic Weight (Lambda): {settings.SEMANTIC_WEIGHT}")
 
