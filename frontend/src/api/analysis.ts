@@ -18,19 +18,15 @@ interface AnalysisResults {
 }
 
 interface AnalysisStatistics {
-  task_id: string;
+  task_id: number;
   status: string;
-  statistics: {
-    total_items: number;
-    total_concepts: number;
-    total_students: number;
-    knowledge_space_states: number;
-    prerequisites_found: number;
-    semantic_clusters: number;
-    root_concepts: number;
-    difficulty_range: { min: number; max: number };
-    concepts_sorted_items: number;
-  };
+  total_items: number;
+  total_concepts: number;
+  total_students: number;
+  knowledge_space_states: number;
+  prerequisites_found: number;
+  semantic_clusters: number;
+  root_concepts: number;
 }
 
 class AnalysisAPI {
@@ -78,6 +74,18 @@ class AnalysisAPI {
 
   async listFiles(taskId: string): Promise<{ files: Array<{ name: string; size: number; path: string }> }> {
     const response = await this.api.get(`/${taskId}/files`);
+    return response.data;
+  }
+
+  async getKnowledgeSpace(taskId: string): Promise<{ knowledge_space: Record<string, string[]> }> {
+    const response = await this.api.get(`/${taskId}/knowledge-space`);
+    return response.data;
+  }
+
+  async downloadFile(filePath: string): Promise<any> {
+    const response = await this.api.get(`/download`, {
+      params: { path: filePath },
+    });
     return response.data;
   }
 }

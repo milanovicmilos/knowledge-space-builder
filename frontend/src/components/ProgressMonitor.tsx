@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import './ProgressMonitor.css';
 import analysisAPI from '../api/analysis';
+import { HourglassEmpty as HourglassIcon, CheckCircle as CheckIcon, Assignment as AssignmentIcon } from '@mui/icons-material';
 
 interface ProgressMonitorProps {
   taskId: string;
@@ -49,7 +50,10 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({ taskId, onComp
   return (
     <div className="progress-monitor">
       <div className="progress-content">
-        <h2>⏳ Analysis in Progress</h2>
+        <h2>
+          <HourglassIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Analysis in Progress
+        </h2>
 
         {error && <div className="error-box">{error}</div>}
 
@@ -91,49 +95,70 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({ taskId, onComp
             </div>
 
             <div className="analysis-stages">
-              <h3>📋 Analysis Stages</h3>
+              <h3>
+                <AssignmentIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1.2rem' }} />
+                Analysis Stages
+              </h3>
               <div className="stage">
-                <div className={`stage-check ${status.progress >= 10 ? 'done' : ''}`}>✓</div>
+                <div className={`stage-check ${status.progress >= 10 ? 'done' : ''}`}>
+                  {status.progress >= 10 ? <CheckIcon sx={{ fontSize: '1rem' }} /> : '○'}
+                </div>
                 <span>Data Preprocessing (DAE)</span>
                 <div className="stage-progress">10%</div>
               </div>
               <div className="stage">
-                <div className={`stage-check ${status.progress >= 20 ? 'done' : ''}`}>✓</div>
+                <div className={`stage-check ${status.progress >= 20 ? 'done' : ''}`}>
+                  {status.progress >= 20 ? <CheckIcon sx={{ fontSize: '1rem' }} /> : '○'}
+                </div>
                 <span>LLM Classification</span>
                 <div className="stage-progress">20%</div>
               </div>
               <div className="stage">
-                <div className={`stage-check ${status.progress >= 30 ? 'done' : ''}`}>✓</div>
+                <div className={`stage-check ${status.progress >= 30 ? 'done' : ''}`}>
+                  {status.progress >= 30 ? <CheckIcon sx={{ fontSize: '1rem' }} /> : '○'}
+                </div>
                 <span>Semantic Clustering</span>
                 <div className="stage-progress">30%</div>
               </div>
               <div className="stage">
-                <div className={`stage-check ${status.progress >= 40 ? 'done' : ''}`}>✓</div>
+                <div className={`stage-check ${status.progress >= 40 ? 'done' : ''}`}>
+                  {status.progress >= 40 ? <CheckIcon sx={{ fontSize: '1rem' }} /> : '○'}
+                </div>
                 <span>Concept Aggregation</span>
                 <div className="stage-progress">40%</div>
               </div>
               <div className="stage">
-                <div className={`stage-check ${status.progress >= 50 ? 'done' : ''}`}>✓</div>
+                <div className={`stage-check ${status.progress >= 50 ? 'done' : ''}`}>
+                  {status.progress >= 50 ? <CheckIcon sx={{ fontSize: '1rem' }} /> : '○'}
+                </div>
                 <span>Difficulty Analysis</span>
                 <div className="stage-progress">50%</div>
               </div>
               <div className="stage">
-                <div className={`stage-check ${status.progress >= 60 ? 'done' : ''}`}>✓</div>
+                <div className={`stage-check ${status.progress >= 60 ? 'done' : ''}`}>
+                  {status.progress >= 60 ? <CheckIcon sx={{ fontSize: '1rem' }} /> : '○'}
+                </div>
                 <span>IITA Extraction</span>
                 <div className="stage-progress">60%</div>
               </div>
               <div className="stage">
-                <div className={`stage-check ${status.progress >= 75 ? 'done' : ''}`}>✓</div>
+                <div className={`stage-check ${status.progress >= 75 ? 'done' : ''}`}>
+                  {status.progress >= 75 ? <CheckIcon sx={{ fontSize: '1rem' }} /> : '○'}
+                </div>
                 <span>Knowledge Space Generation</span>
                 <div className="stage-progress">75%</div>
               </div>
               <div className="stage">
-                <div className={`stage-check ${status.progress >= 85 ? 'done' : ''}`}>✓</div>
+                <div className={`stage-check ${status.progress >= 85 ? 'done' : ''}`}>
+                  {status.progress >= 85 ? <CheckIcon sx={{ fontSize: '1rem' }} /> : '○'}
+                </div>
                 <span>Visualization</span>
                 <div className="stage-progress">85%</div>
               </div>
               <div className="stage">
-                <div className={`stage-check ${status.progress >= 100 ? 'done' : ''}`}>✓</div>
+                <div className={`stage-check ${status.progress >= 100 ? 'done' : ''}`}>
+                  {status.progress >= 100 ? <CheckIcon sx={{ fontSize: '1rem' }} /> : '○'}
+                </div>
                 <span>RDF/TTL Ontology Export</span>
                 <div className="stage-progress">100%</div>
               </div>

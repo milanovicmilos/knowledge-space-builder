@@ -138,34 +138,51 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         # Učitaj rezultate iz output foldera
         statistics = {}
         result_files = {}
+        knowledge_space_data = None
+        implications_data = None
+        semantic_clusters_data = None
+        llm_classifications_data = None
+        item_difficulties_data = None
         
         # Load statistics from JSON files
         if (lsg_output_path / "llm_item_classifications.json").exists():
             with open(lsg_output_path / "llm_item_classifications.json", 'r') as f:
-                llm_data = json.load(f)
-                statistics["total_items"] = len(llm_data)
-                statistics["total_concepts"] = len(set(llm_data.values()))
+                llm_classifications_data = json.load(f)
+                statistics["total_items"] = len(llm_classifications_data)
+                statistics["total_concepts"] = len(set(llm_classifications_data.values()))
         
         if (lsg_output_path / "knowledge_space.json").exists():
             with open(lsg_output_path / "knowledge_space.json", 'r') as f:
-                ks_data = json.load(f)
-                statistics["knowledge_space_states"] = len(ks_data)
+                knowledge_space_data = json.load(f)
+                statistics["knowledge_space_states"] = len(knowledge_space_data)
         
         if (lsg_output_path / "implications.json").exists():
             with open(lsg_output_path / "implications.json", 'r') as f:
-                impl_data = json.load(f)
-                statistics["prerequisites_found"] = len(impl_data)
+                implications_data = json.load(f)
+                statistics["prerequisites_found"] = len(implications_data)
         
         if (lsg_output_path / "semantic_clusters.json").exists():
             with open(lsg_output_path / "semantic_clusters.json", 'r') as f:
-                sem_data = json.load(f)
-                statistics["semantic_clusters"] = len(sem_data)
+                semantic_clusters_data = json.load(f)
+                statistics["semantic_clusters"] = len(semantic_clusters_data)
+        
+        if (lsg_output_path / "item_difficulties.json").exists():
+            with open(lsg_output_path / "item_difficulties.json", 'r') as f:
+                item_difficulties_data = json.load(f)
         
         if (lsg_output_path / "aggregated_concepts.csv").exists():
             with open(lsg_output_path / "aggregated_concepts.csv", 'r') as f:
                 lines = f.readlines()
                 if len(lines) > 1:
                     statistics["total_students"] = len(lines) - 1
+        
+        # Pronađi root concepts (bez prerequisites)
+        root_count = 0
+        if knowledge_space_data and implications_data:
+            for state in knowledge_space_data.keys():
+                if state == "{}":  # Empty set je root
+                    root_count += 1
+            statistics["root_concepts"] = max(1, root_count)  # Minimum 1
         
         # Index all result files
         for file_path in lsg_output_path.glob("*"):
@@ -182,7 +199,17 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
             prerequisites_found=statistics.get("prerequisites_found", 0),
             semantic_clusters=statistics.get("semantic_clusters", 0),
             root_concepts=statistics.get("root_concepts", 0),
-            result_files=result_files
+            # Sačuvaj JSON podatke u bazu
+            knowledge_space=knowledge_space_data,
+            implications=implications_data,
+            semantic_clusters_data=semantic_clusters_data,
+            llm_classifications=llm_classifications_data,
+            item_difficulties=item_difficulties_data,
+            # File references
+            result_files=result_files,
+            # Metadata
+            source="web_app",
+            storage_location="postgresql"
         )
         db.add(result)
         

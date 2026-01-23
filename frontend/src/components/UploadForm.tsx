@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './UploadForm.css';
 import analysisAPI from '../api/analysis';
+import { Assessment as AssessmentIcon, Description as DescriptionIcon } from '@mui/icons-material';
 
 interface UploadFormProps {
   onUploadStart: (taskId: string) => void;
@@ -46,7 +47,10 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart }) => {
   return (
     <div className="upload-form-container">
       <div className="upload-form">
-        <h2>📊 Knowledge Space Generator</h2>
+        <h2>
+          <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Knowledge Space Generator
+        </h2>
         <p>Upload your CSV file to generate a knowledge space</p>
 
         <form onSubmit={handleSubmit}>
@@ -71,7 +75,10 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart }) => {
         </form>
 
         <div className="info-box">
-          <h3>📋 Expected CSV Format</h3>
+          <h3>
+            <DescriptionIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1.2rem' }} />
+            Expected CSV Format
+          </h3>
           <ul>
             <li>First row: Column headers (student ID, item IDs)</li>
             <li>Rows: Student responses (0 = incorrect, 1 = correct)</li>

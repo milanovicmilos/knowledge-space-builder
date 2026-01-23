@@ -1,6 +1,32 @@
 import React, { useEffect, useState } from 'react';
-import './ResultsDashboard.css';
+import {
+  Box,
+  Paper,
+  Typography,
+  Tab,
+  Tabs,
+  Card,
+  CardContent,
+  Grid,
+  Button,
+  CircularProgress,
+  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+} from '@mui/material';
+import {
+  ArrowBack as ArrowBackIcon,
+  Info as InfoIcon,
+  GetApp as GetAppIcon,
+  Fullscreen as FullscreenIcon,
+} from '@mui/icons-material';
 import analysisAPI from '../api/analysis';
+import { GraphModal } from './GraphModal';
+import { storageService } from '../utils/storageService';
 
 interface ResultsDashboardProps {
   taskId: string;
@@ -8,6 +34,8 @@ interface ResultsDashboardProps {
 }
 
 interface Statistics {
+  task_id: number;
+  status: string;
   total_items: number;
   total_concepts: number;
   total_students: number;
@@ -15,8 +43,8 @@ interface Statistics {
   prerequisites_found: number;
   semantic_clusters: number;
   root_concepts: number;
-  difficulty_range: { min: number; max: number };
-  concepts_sorted_items: number;
+  difficulty_range?: { min: number; max: number };
+  concepts_sorted_items?: number;
 }
 
 interface ResultFile {
@@ -25,13 +53,30 @@ interface ResultFile {
   path: string;
 }
 
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index } = props;
+
+  return (
+    <div hidden={value !== index} style={{ width: '100%' }}>
+      {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
+    </div>
+  );
+}
+
 export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onReset }) => {
   const [statistics, setStatistics] = useState<Statistics | null>(null);
-  const [graphUrl, setGraphUrl] = useState<string | null>(null);
+  const [knowledgeSpace, setKnowledgeSpace] = useState<Record<string, string[]> | null>(null);
   const [files, setFiles] = useState<ResultFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'stats' | 'graph' | 'files'>('stats');
+  const [tabValue, setTabValue] = useState(0);
+  const [graphModalOpen, setGraphModalOpen] = useState(false);
 
   useEffect(() => {
     const loadResults = async () => {
@@ -41,16 +86,24 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onRe
       try {
         // Load statistics
         const statsData = await analysisAPI.getStatistics(taskId);
-        setStatistics(statsData.statistics);
+        // API returns statistics directly, not wrapped
+        setStatistics(statsData);
+        storageService.saveStatistics(statsData);
 
-        // Load visualization
+        // Load knowledge space
         try {
-          const vizData = await analysisAPI.getVisualization(taskId);
-          if (vizData.graph_exists) {
-            setGraphUrl(vizData.graph_file);
+          const ksData = await analysisAPI.getKnowledgeSpace(taskId);
+          // API returns {knowledge_space: {...}}
+          if (ksData && ksData.knowledge_space) {
+            setKnowledgeSpace(ksData.knowledge_space);
+            storageService.saveKnowledgeSpace(ksData.knowledge_space);
           }
         } catch {
-          // Graph might not exist, that's ok
+          // Knowledge space might not exist, try to load from storage
+          const cached = storageService.loadKnowledgeSpace();
+          if (cached) {
+            setKnowledgeSpace(cached);
+          }
         }
 
         // Load files
@@ -66,237 +119,261 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onRe
     loadResults();
   }, [taskId]);
 
+  const handleDownloadFile = async (filePath: string, fileName: string) => {
+    try {
+      const data = await analysisAPI.downloadFile(filePath);
+      const blob = new Blob([JSON.stringify(data, null, 2)]);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+    } catch (error) {
+      console.error('Error downloading file:', error);
+    }
+  };
+
   if (loading) {
-    return <div className="results-loading">Loading results...</div>;
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   if (error) {
     return (
-      <div className="results-error">
-        <p>Error: {error}</p>
-        <button onClick={onReset}>← Back</button>
-      </div>
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+        <Button startIcon={<ArrowBackIcon />} onClick={onReset} variant="outlined">
+          Back to Upload
+        </Button>
+      </Box>
     );
   }
 
   return (
-    <div className="results-dashboard">
-      <div className="dashboard-header">
-        <h1>📊 Analysis Results</h1>
-        <p>Task ID: {taskId}</p>
-      </div>
+    <Box sx={{ width: '100%' }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Analysis Results
+          </Typography>
+          <Typography variant="body2" color="textSecondary">
+            Task ID: {taskId}
+          </Typography>
+        </Box>
+        <Button startIcon={<ArrowBackIcon />} onClick={onReset} variant="outlined">
+          Back
+        </Button>
+      </Box>
 
-      <div className="dashboard-tabs">
-        <button
-          className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`}
-          onClick={() => setActiveTab('stats')}
+      {/* Tabs */}
+      <Paper sx={{ mb: 3 }}>
+        <Tabs
+          value={tabValue}
+          onChange={(_, newValue) => setTabValue(newValue)}
+          aria-label="result tabs"
         >
-          📈 Statistics
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'graph' ? 'active' : ''}`}
-          onClick={() => setActiveTab('graph')}
-        >
-          📊 Visualization
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'files' ? 'active' : ''}`}
-          onClick={() => setActiveTab('files')}
-        >
-          📁 Files
-        </button>
-      </div>
+          <Tab label="Statistics" />
+          <Tab label="Knowledge Space" disabled={!knowledgeSpace} />
+          <Tab label="Files" />
+        </Tabs>
+      </Paper>
 
-      {/* STATISTICS TAB */}
-      {activeTab === 'stats' && statistics && (
-        <div className="tab-content">
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-icon">📝</div>
-              <div className="stat-label">Total Items</div>
-              <div className="stat-value">{statistics.total_items}</div>
-              <div className="stat-description">Test questions analyzed</div>
-            </div>
+      {/* Statistics Tab */}
+      <TabPanel value={tabValue} index={0}>
+        {statistics && (
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Total Items
+                  </Typography>
+                  <Typography variant="h4">{statistics.total_items}</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Test questions analyzed
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
 
-            <div className="stat-card">
-              <div className="stat-icon">🎯</div>
-              <div className="stat-label">Concepts</div>
-              <div className="stat-value">{statistics.total_concepts}</div>
-              <div className="stat-description">Unique knowledge concepts</div>
-            </div>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Concepts
+                  </Typography>
+                  <Typography variant="h4">{statistics.total_concepts}</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Unique knowledge concepts
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
 
-            <div className="stat-card">
-              <div className="stat-icon">👥</div>
-              <div className="stat-label">Students</div>
-              <div className="stat-value">{statistics.total_students}</div>
-              <div className="stat-description">Test participants analyzed</div>
-            </div>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Students
+                  </Typography>
+                  <Typography variant="h4">{statistics.total_students}</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Test participants analyzed
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
 
-            <div className="stat-card">
-              <div className="stat-icon">🌐</div>
-              <div className="stat-label">Knowledge States</div>
-              <div className="stat-value">{statistics.knowledge_space_states}</div>
-              <div className="stat-description">Possible learning states</div>
-            </div>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Knowledge States
+                  </Typography>
+                  <Typography variant="h4">{statistics.knowledge_space_states}</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Possible learning states
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
 
-            <div className="stat-card">
-              <div className="stat-icon">🔗</div>
-              <div className="stat-label">Prerequisites</div>
-              <div className="stat-value">{statistics.prerequisites_found}</div>
-              <div className="stat-description">Concept dependencies</div>
-            </div>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Prerequisites
+                  </Typography>
+                  <Typography variant="h4">{statistics.prerequisites_found}</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Concept dependencies
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
 
-            <div className="stat-card">
-              <div className="stat-icon">🏷️</div>
-              <div className="stat-label">Semantic Clusters</div>
-              <div className="stat-value">{statistics.semantic_clusters}</div>
-              <div className="stat-description">Semantically similar groups</div>
-            </div>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Root Concepts
+                  </Typography>
+                  <Typography variant="h4">{statistics.root_concepts}</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    No prerequisites required
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
 
-            <div className="stat-card">
-              <div className="stat-icon">🌳</div>
-              <div className="stat-label">Root Concepts</div>
-              <div className="stat-value">{statistics.root_concepts}</div>
-              <div className="stat-description">Starting points (no prerequisites)</div>
-            </div>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Semantic Clusters
+                  </Typography>
+                  <Typography variant="h4">{statistics.semantic_clusters}</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Item groupings
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
 
-            <div className="stat-card">
-              <div className="stat-icon">📊</div>
-              <div className="stat-label">Item Difficulty</div>
-              <div className="stat-value">
-                {statistics.difficulty_range?.min ? 
-                  `${(statistics.difficulty_range.min * 100).toFixed(1)}% - ${(statistics.difficulty_range.max * 100).toFixed(1)}%` :
-                  'N/A'
-                }
-              </div>
-              <div className="stat-description">Easiest to hardest items</div>
-            </div>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>
+                    Sorted Items
+                  </Typography>
+                  <Typography variant="h4">{statistics.concepts_sorted_items ?? 'N/A'}</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    By difficulty
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+        )}
+      </TabPanel>
 
-            <div className="stat-card">
-              <div className="stat-icon">⭐</div>
-              <div className="stat-label">Sorted Items</div>
-              <div className="stat-value">{statistics.concepts_sorted_items}</div>
-              <div className="stat-description">Concepts with difficulty ranking</div>
-            </div>
-          </div>
+      {/* Knowledge Space Tab */}
+      <TabPanel value={tabValue} index={1}>
+        {knowledgeSpace ? (
+          <Box>
+            <Box sx={{ mb: 3 }}>
+              <Button
+                variant="contained"
+                startIcon={<FullscreenIcon />}
+                onClick={() => setGraphModalOpen(true)}
+                size="large"
+              >
+                Open Knowledge Space Graph
+              </Button>
+            </Box>
+            <Alert severity="info" icon={<InfoIcon />}>
+              Knowledge Space contains {Object.keys(knowledgeSpace).length} possible learning states
+              in a directed acyclic graph (DAG) representing prerequisite relationships between
+              mathematical concepts.
+            </Alert>
+          </Box>
+        ) : (
+          <Alert severity="warning">Knowledge space data not available</Alert>
+        )}
+      </TabPanel>
 
-          <div className="stats-explanation">
-            <h3>📖 Understanding the Results</h3>
-            <ul>
-              <li>
-                <strong>Total Items:</strong> Number of test questions that were analyzed (121)
-              </li>
-              <li>
-                <strong>Concepts:</strong> Unique mathematical concepts identified by LLM (25)
-              </li>
-              <li>
-                <strong>Students:</strong> Number of students whose responses were analyzed (692)
-              </li>
-              <li>
-                <strong>Knowledge States:</strong> All possible valid combinations of concepts (355)
-              </li>
-              <li>
-                <strong>Prerequisites:</strong> Statistically valid concept dependencies found (30)
-              </li>
-              <li>
-                <strong>Semantic Clusters:</strong> Groups of semantically similar items (24)
-              </li>
-              <li>
-                <strong>Root Concepts:</strong> Concepts with no prerequisites, starting points (8)
-              </li>
-              <li>
-                <strong>Difficulty Range:</strong> Min/max of student success rates on items
-              </li>
-            </ul>
-          </div>
-        </div>
+      {/* Files Tab */}
+      <TabPanel value={tabValue} index={2}>
+        {files.length > 0 ? (
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                  <TableCell>File Name</TableCell>
+                  <TableCell align="right">Size (KB)</TableCell>
+                  <TableCell align="center">Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {files.map((file, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>{file.name}</TableCell>
+                    <TableCell align="right">{(file.size / 1024).toFixed(2)}</TableCell>
+                    <TableCell align="center">
+                      <Button
+                        startIcon={<GetAppIcon />}
+                        onClick={() => handleDownloadFile(file.path, file.name)}
+                        size="small"
+                        variant="outlined"
+                      >
+                        Download
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        ) : (
+          <Alert severity="info">No files available</Alert>
+        )}
+      </TabPanel>
+
+      {/* Graph Modal */}
+      {knowledgeSpace && (
+        <GraphModal
+          open={graphModalOpen}
+          onClose={() => setGraphModalOpen(false)}
+          knowledgeSpace={knowledgeSpace}
+          title="Knowledge Space Graph"
+        />
       )}
-
-      {/* VISUALIZATION TAB */}
-      {activeTab === 'graph' && (
-        <div className="tab-content">
-          {graphUrl ? (
-            <div className="graph-container">
-              <h3>Knowledge Structure Graph</h3>
-              <img src={graphUrl} alt="Knowledge Structure Graph" className="graph-image" />
-              <p className="graph-description">
-                This graph shows all {statistics?.knowledge_space_states} valid knowledge states and how they connect
-                based on prerequisite relationships.
-              </p>
-            </div>
-          ) : (
-            <div className="no-graph">
-              <p>📊 Visualization not available yet</p>
-              <p>The graph may still be generating. Please refresh in a moment.</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* FILES TAB */}
-      {activeTab === 'files' && (
-        <div className="tab-content">
-          <div className="files-container">
-            <h3>Generated Files ({files.length})</h3>
-            <div className="files-list">
-              {files.map((file) => (
-                <div key={file.name} className="file-item">
-                  <div className="file-icon">
-                    {file.name.endsWith('.json') ? '📄' : file.name.endsWith('.csv') ? '📊' : file.name.endsWith('.png') ? '🖼️' : file.name.endsWith('.ttl') ? '🌐' : '📁'}
-                  </div>
-                  <div className="file-info">
-                    <div className="file-name">{file.name}</div>
-                    <div className="file-size">{(file.size / 1024).toFixed(1)} KB</div>
-                  </div>
-                  <div className="file-action">
-                    <a href={`/api/v1/analysis/${taskId}/file/${file.name}`} target="_blank" rel="noopener noreferrer">
-                      Open →
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="file-descriptions">
-              <h4>File Descriptions</h4>
-              <dl>
-                <dt>knowledge_space.json</dt>
-                <dd>All valid knowledge states and transitions between them</dd>
-
-                <dt>implications.json</dt>
-                <dd>Prerequisite relationships between concepts</dd>
-
-                <dt>llm_item_classifications.json</dt>
-                <dd>Mapping of items to concepts (LLM classification)</dd>
-
-                <dt>semantic_clusters.json</dt>
-                <dd>Groups of semantically similar items</dd>
-
-                <dt>aggregated_concepts.csv</dt>
-                <dd>Student mastery scores for each concept</dd>
-
-                <dt>item_difficulties.json</dt>
-                <dd>Difficulty of each item (% of students correct)</dd>
-
-                <dt>concepts_sorted_by_difficulty.json</dt>
-                <dd>Items within each concept sorted by difficulty</dd>
-
-                <dt>sotis_ontology.ttl</dt>
-                <dd>RDF/TTL format for semantic web integration (SOTIS)</dd>
-
-                <dt>knowledge_structure_graph.png</dt>
-                <dd>Visual representation of the knowledge structure</dd>
-              </dl>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="dashboard-footer">
-        <button onClick={onReset} className="reset-btn">
-          ← Analyze Another Dataset
-        </button>
-      </div>
-    </div>
+    </Box>
   );
 };
