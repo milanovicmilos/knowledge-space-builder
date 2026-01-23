@@ -61,7 +61,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         # Pripremi putanje
         lsg_path = Path(settings.LSG_PATH)
         lsg_data_path = lsg_path / "data"
-        lsg_output_path = Path(settings.LSG_OUTPUT_PATH)
+        lsg_output_path = lsg_path / "output"
         
         # Kreiraj direktorijume ako ne postoje
         lsg_data_path.mkdir(parents=True, exist_ok=True)
@@ -77,7 +77,6 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         db.commit()
         
         # Pokreni learning_space_generator
-        # Koristimo Python iz virtualnog okruženja LSG-a
         venv_python = lsg_path / ".venv" / "bin" / "python" if (lsg_path / ".venv" / "bin").exists() else "python"
         script = lsg_path / settings.LSG_SCRIPT
         

@@ -8,10 +8,19 @@ from learning_space_generator.app.core.config import settings
 from learning_space_generator.app.models.dae import DenoisingAutoencoder
 import logging
 import os
+import random
 
 # Force CPU-only mode (no CUDA)
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 torch.cuda.is_available = lambda: False
+
+# Set deterministic seeds for reproducibility
+DETERMINISTIC_SEED = 42
+random.seed(DETERMINISTIC_SEED)
+np.random.seed(DETERMINISTIC_SEED)
+torch.manual_seed(DETERMINISTIC_SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -70,7 +79,10 @@ class PreprocessingService:
         tensor_data = torch.FloatTensor(data_filled.values).to(device)
         tensor_mask = torch.FloatTensor(mask.values).to(device)
         dataset = TensorDataset(tensor_data, tensor_data, tensor_mask)
-        dataloader = DataLoader(dataset, batch_size=settings.DAE_BATCH_SIZE, shuffle=True)
+        # Use generator with fixed seed for deterministic shuffling
+        g = torch.Generator()
+        g.manual_seed(DETERMINISTIC_SEED)
+        dataloader = DataLoader(dataset, batch_size=settings.DAE_BATCH_SIZE, shuffle=True, generator=g, worker_init_fn=lambda id: np.random.seed(DETERMINISTIC_SEED + id))
 
         logger.info(f"Training DAE for {settings.DAE_EPOCHS} epochs...")
         logger.info(f"Using masking to handle missing data (NaN values)")

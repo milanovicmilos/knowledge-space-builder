@@ -13,7 +13,9 @@ class Settings:
     DATA_DIR: Path = BASE_DIR / "data"
     OUTPUT_DIR: Path = BASE_DIR / "output"
     
-    INPUT_FILE: Path = DATA_DIR / "matheGesamt.csv"
+    # INPUT_FILE: Try uploaded_data.csv first (from frontend), fallback to matheGesamt.csv (local)
+    _uploaded = DATA_DIR / "uploaded_data.csv"
+    INPUT_FILE: Path = _uploaded if _uploaded.exists() else DATA_DIR / "matheGesamt.csv"
     PDF_FILE: Path = DATA_DIR / "COINS-alle-Cluster-CH.pdf"
     
     CLEANED_DATA_FILE: Path = OUTPUT_DIR / "cleaned_responses.csv"
@@ -32,7 +34,7 @@ class Settings:
     USE_CONCEPT_LEVEL_IITA: bool = True  # NEW: Run IITA on concepts, not items
     
     # JSON Generation
-    MAX_STATES_LIMIT: int = 5000
+    MAX_STATES_LIMIT: int = 50000  # Increased to allow full generation without artificial cutoff
     
     # Semantic Settings
     SEMANTIC_MODEL_NAME: str = "all-MiniLM-L6-v2"

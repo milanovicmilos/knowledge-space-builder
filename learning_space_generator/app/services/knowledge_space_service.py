@@ -104,21 +104,21 @@ class KnowledgeSpaceService:
             for item in candidates:
                 next_state = current_state | {item}
                 
-                # INTELLIGENT PRUNING:
-                # Include state if:
-                # 1. It's observed in student data (frequency >= 1)
-                # 2. It's on a path to observed states (partially observed parents)
+                # TUTOR-OPTIMIZED PRUNING (Target: 5x-10x expansion):
+                # Only include states that represent real learning milestones
                 freq = state_frequency.get(next_state, 0)
                 prob = freq / total_students if total_students > 0 else 0
                 
-                # Check if state is on path to real states
-                on_path = any(
-                    next_state.issubset(obs_state) 
+                # Check if state is a subset of observed AND small enough
+                on_learning_path = any(
+                    next_state.issubset(obs_state)
                     for obs_state in observed_states
                 ) if observed_states else True
                 
-                # Include if: observed directly OR on path to observed
-                if freq >= 1 or on_path:
+                # Strict criteria: 
+                # - Observed (freq >= 1), OR
+                # - On path, unobserved, but small (size <= 8) - early learning stages only
+                if freq >= 1 or (on_learning_path and freq == 0 and len(next_state) <= 8):
                     # Next Key
                     next_list = sorted(list(next_state))
                     next_key = "{" + ", ".join(next_list) + "}"
@@ -138,8 +138,9 @@ class KnowledgeSpaceService:
             if count >= settings.MAX_STATES_LIMIT:
                 break
                 
-        logger.info(f"Generated {len(visited)} states (kept all observed + intermediate states).")
+        logger.info(f"Generated {len(visited)} states (observed + early paths, max size 8).")
         logger.info(f"Coverage: {len(visited)} states from {len(observed_states)} observed student states.")
+        logger.info(f"Expansion factor: {len(visited) / max(1, len(observed_states)):.1f}x")
         
         with open(settings.KNOWLEDGE_SPACE_FILE, 'w') as f:
             json.dump(ks_graph, f, indent=2)

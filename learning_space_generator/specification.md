@@ -1,3 +1,4 @@
+-- Active: 1765933423628@@127.0.0.1@5432
 # Specifikacija projekta
 Projekat 3 - Konstruisanje prostora znanja za matematički domen nad realnim podacima – u saradnji sa  Pädagogischen Hochschule St.Gallen (PHSG)
  
