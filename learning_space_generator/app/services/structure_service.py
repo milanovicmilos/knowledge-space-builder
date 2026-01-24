@@ -175,7 +175,7 @@ class StructureService:
             logger.info(f"Found {len(clusters)} semantic clusters.")
             
             # Run IITA per cluster (if cluster size >= min_threshold)
-            min_cluster_size = 5
+            min_cluster_size = settings.MIN_CLUSTER_SIZE_IITA
             all_cluster_implications = []
             
             for cluster_id, cluster_items in clusters.items():

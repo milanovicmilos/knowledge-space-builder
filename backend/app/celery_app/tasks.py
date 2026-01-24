@@ -137,7 +137,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         
         concept_aggregation_service.run_aggregation_pipeline(
             binarize=True,
-            binarize_threshold=0.5
+            binarize_threshold=None  # Uses settings.CONCEPT_BINARIZE_THRESHOLD by default
         )
         
         task.progress = 50

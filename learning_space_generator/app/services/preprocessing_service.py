@@ -15,7 +15,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = ''
 torch.cuda.is_available = lambda: False
 
 # Set deterministic seeds for reproducibility
-DETERMINISTIC_SEED = 42
+DETERMINISTIC_SEED = settings.RANDOM_SEED
 random.seed(DETERMINISTIC_SEED)
 np.random.seed(DETERMINISTIC_SEED)
 torch.manual_seed(DETERMINISTIC_SEED)
@@ -113,7 +113,7 @@ class PreprocessingService:
 
         return model
 
-    def denoise_data(self, model: DenoisingAutoencoder, data: pd.DataFrame, threshold: float = 0.5) -> pd.DataFrame:
+    def denoise_data(self, model: DenoisingAutoencoder, data: pd.DataFrame, threshold: float = None) -> pd.DataFrame:
         logger.info("Denoising data...")
         device = torch.device('cpu')  # Explicitly use CPU
         model.to(device)
@@ -122,6 +122,10 @@ class PreprocessingService:
         # Fill NaN with 0 for forward pass
         data_filled = data.fillna(0)
         original_mask = data.notna()
+        
+        # Koristi threshold iz settings ako nije prosleđen
+        if threshold is None:
+            threshold = settings.DAE_DENOISE_THRESHOLD
         
         with torch.no_grad():
             tensor_data = torch.FloatTensor(data_filled.values).to(device)

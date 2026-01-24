@@ -49,7 +49,7 @@ def main():
         from learning_space_generator.app.core.config import settings
         concept_aggregation_service.run_aggregation_pipeline(
             binarize=True,
-            binarize_threshold=0.5
+            binarize_threshold=settings.CONCEPT_BINARIZE_THRESHOLD
         )
         print("PROGRESS:50:Concept aggregation completed", flush=True)
         logger.info("Concept aggregation completed. IITA will now run on concept-level data.")

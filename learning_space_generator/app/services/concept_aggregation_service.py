@@ -163,7 +163,7 @@ class ConceptAggregationService:
         data_file: Path = None,
         output_file: Path = None,
         binarize: bool = False,
-        binarize_threshold: float = 0.5
+        binarize_threshold: float = None
     ) -> Path:
         """
         Complete aggregation pipeline
@@ -173,7 +173,7 @@ class ConceptAggregationService:
             data_file: Path to cleaned student data
             output_file: Path to save aggregated data
             binarize: Whether to binarize mastery scores
-            binarize_threshold: Threshold for binarization
+            binarize_threshold: Threshold for binarization (uses settings.CONCEPT_BINARIZE_THRESHOLD if None)
             
         Returns:
             Path to aggregated data file
@@ -185,6 +185,8 @@ class ConceptAggregationService:
             data_file = settings.CLEANED_DATA_FILE
         if output_file is None:
             output_file = settings.OUTPUT_DIR / "aggregated_concepts.csv"
+        if binarize_threshold is None:
+            binarize_threshold = settings.CONCEPT_BINARIZE_THRESHOLD
         
         # Load classifications
         self.load_item_classifications(classifications_file)

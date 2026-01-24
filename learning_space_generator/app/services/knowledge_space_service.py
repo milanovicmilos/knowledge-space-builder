@@ -117,8 +117,8 @@ class KnowledgeSpaceService:
                 
                 # Strict criteria: 
                 # - Observed (freq >= 1), OR
-                # - On path, unobserved, but small (size <= 8) - early learning stages only
-                if freq >= 1 or (on_learning_path and freq == 0 and len(next_state) <= 8):
+                # - On path, unobserved, but small (size <= settings.MAX_STATE_SIZE) - early learning stages only
+                if freq >= 1 or (on_learning_path and freq == 0 and len(next_state) <= settings.MAX_STATE_SIZE):
                     # Next Key
                     next_list = sorted(list(next_state))
                     next_key = "{" + ", ".join(next_list) + "}"
