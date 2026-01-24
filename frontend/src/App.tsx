@@ -64,6 +64,14 @@ function App() {
     setStage('home');
   };
 
+  const handleBackToHome = () => {
+    setStage('home');
+  };
+
+  const handleBackToHistory = () => {
+    setStage('history');
+  };
+
   if (!isRestored) {
     return null; // Show nothing while restoring
   }
@@ -86,7 +94,7 @@ function App() {
           )}
 
           {stage === 'results' && currentTaskId && (
-            <ResultsDashboard taskId={currentTaskId} onReset={handleReset} />
+            <ResultsDashboard taskId={currentTaskId} onBack={handleBackToHome} onViewHistory={handleBackToHistory} />
           )}
 
           {stage === 'history' && (

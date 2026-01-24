@@ -17,20 +17,25 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Info as InfoIcon,
   GetApp as GetAppIcon,
   Fullscreen as FullscreenIcon,
+  Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import analysisAPI from '../api/analysis';
 import { GraphModal } from './GraphModal';
 import { storageService } from '../utils/storageService';
+import './ResultsDashboard.css';
 
 interface ResultsDashboardProps {
   taskId: string;
-  onReset: () => void;
+  onBack: () => void;
+  onViewHistory: () => void;
 }
 
 interface Statistics {
@@ -69,7 +74,7 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onReset }) => {
+export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onBack, onViewHistory }) => {
   const [statistics, setStatistics] = useState<Statistics | null>(null);
   const [knowledgeSpace, setKnowledgeSpace] = useState<Record<string, string[]> | null>(null);
   const [files, setFiles] = useState<ResultFile[]>([]);
@@ -135,171 +140,271 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onRe
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-        <CircularProgress />
+      <Box className="results-loading">
+        <CircularProgress size={60} />
+        <Typography variant="h6" sx={{ mt: 3 }}>Loading results...</Typography>
       </Box>
     );
   }
 
   if (error) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
+      <Box className="results-error-container">
+        <Alert severity="error" sx={{ mb: 3, maxWidth: 600 }}>
           {error}
         </Alert>
-        <Button startIcon={<ArrowBackIcon />} onClick={onReset} variant="outlined">
-          Back to Upload
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Button 
+            startIcon={<ArrowBackIcon />} 
+            onClick={onBack} 
+            variant="contained"
+            size="large"
+          >
+            Back to Home
+          </Button>
+          <Button 
+            onClick={onViewHistory} 
+            variant="outlined"
+            size="large"
+          >
+            View History
+          </Button>
+        </Box>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ width: '100%' }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Box>
-          <Typography variant="h4" component="h1" gutterBottom>
+    <Box className="results-dashboard-container">
+      {/* Header Section - Similar to Home.tsx */}
+      <Box className="results-header">
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2, gap: 2 }}>
+          <AssessmentIcon sx={{ fontSize: 48, color: 'primary.main' }} />
+          <Typography variant="h3" component="h1" sx={{ fontWeight: 600 }}>
             Analysis Results
           </Typography>
-          <Typography variant="body2" color="textSecondary">
-            Task ID: {taskId}
-          </Typography>
         </Box>
-        <Button startIcon={<ArrowBackIcon />} onClick={onReset} variant="outlined">
-          Back
-        </Button>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
+          Task ID: {taskId} • {statistics?.status || 'Completed'}
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Button 
+            startIcon={<ArrowBackIcon />} 
+            onClick={onBack}
+            variant="contained"
+            size="large"
+          >
+            Back to Home
+          </Button>
+          <Button 
+            onClick={onViewHistory}
+            variant="outlined"
+            size="large"
+          >
+            View History
+          </Button>
+        </Box>
       </Box>
 
       {/* Tabs */}
-      <Paper sx={{ mb: 3 }}>
-        <Tabs
-          value={tabValue}
-          onChange={(_, newValue) => setTabValue(newValue)}
-          aria-label="result tabs"
-        >
-          <Tab label="Statistics" />
-          <Tab label="Knowledge Space" disabled={!knowledgeSpace} />
-          <Tab label="Files" />
-        </Tabs>
-      </Paper>
+      <Box className="results-tabs-container">
+        <Paper elevation={2} sx={{ borderRadius: 2 }}>
+          <Tabs
+            value={tabValue}
+            onChange={(_, newValue) => setTabValue(newValue)}
+            aria-label="result tabs"
+            centered
+            sx={{
+              '& .MuiTab-root': {
+                fontSize: '1rem',
+                fontWeight: 500,
+                textTransform: 'none',
+                minHeight: 64,
+              },
+            }}
+          >
+            <Tab label="Statistics Overview" />
+            <Tab label="Knowledge Space Graph" disabled={!knowledgeSpace} />
+            <Tab label="Download Files" />
+          </Tabs>
+        </Paper>
+      </Box>
+
+      {/* Tab Content */}
+      <Box className="results-tab-content">
 
       {/* Statistics Tab */}
       <TabPanel value={tabValue} index={0}>
         {statistics && (
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Total Items
-                  </Typography>
-                  <Typography variant="h4">{statistics.total_items}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Test questions analyzed
-                  </Typography>
-                </CardContent>
-              </Card>
+          <Box>
+            {/* Main Data Statistics */}
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, ml: 1 }}>
+              📊 Dataset Overview
+            </Typography>
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12} sm={6} md={4}>
+                <Card elevation={3} className="stat-card">
+                  <CardContent>
+                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      Total Items
+                    </Typography>
+                    <Typography variant="h3" sx={{ my: 1, fontWeight: 700, color: 'primary.main' }}>
+                      {statistics.total_items}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Test questions analyzed
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={4}>
+                <Card elevation={3} className="stat-card">
+                  <CardContent>
+                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      Students
+                    </Typography>
+                    <Typography variant="h3" sx={{ my: 1, fontWeight: 700, color: 'success.main' }}>
+                      {statistics.total_students}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Test participants analyzed
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={4}>
+                <Card elevation={3} className="stat-card">
+                  <CardContent>
+                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      Avg. Items/Student
+                    </Typography>
+                    <Typography variant="h3" sx={{ my: 1, fontWeight: 700, color: 'info.main' }}>
+                      {statistics.total_students > 0 
+                        ? (statistics.total_items / statistics.total_students).toFixed(1)
+                        : 0
+                      }
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Data coverage per participant
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
             </Grid>
 
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Concepts
-                  </Typography>
-                  <Typography variant="h4">{statistics.total_concepts}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Unique knowledge concepts
-                  </Typography>
-                </CardContent>
-              </Card>
+            {/* Knowledge Structure Statistics */}
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, ml: 1 }}>
+              🧠 Knowledge Structure
+            </Typography>
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12} sm={6} md={4}>
+                <Card elevation={3} className="stat-card">
+                  <CardContent>
+                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      Concepts
+                    </Typography>
+                    <Typography variant="h3" sx={{ my: 1, fontWeight: 700, color: 'secondary.main' }}>
+                      {statistics.total_concepts}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Unique knowledge domains
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={4}>
+                <Card elevation={3} className="stat-card">
+                  <CardContent>
+                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      Prerequisites
+                    </Typography>
+                    <Typography variant="h3" sx={{ my: 1, fontWeight: 700, color: 'warning.main' }}>
+                      {statistics.prerequisites_found}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Concept dependencies found
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={4}>
+                <Card elevation={3} className="stat-card">
+                  <CardContent>
+                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      Root Concepts
+                    </Typography>
+                    <Typography variant="h3" sx={{ my: 1, fontWeight: 700, color: 'error.main' }}>
+                      {statistics.root_concepts}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Foundational concepts
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
             </Grid>
 
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Students
-                  </Typography>
-                  <Typography variant="h4">{statistics.total_students}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Test participants analyzed
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
+            {/* Learning Space Statistics */}
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, ml: 1 }}>
+              📚 Learning Space Analysis
+            </Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6} md={4}>
+                <Card elevation={3} className="stat-card">
+                  <CardContent>
+                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      Knowledge States
+                    </Typography>
+                    <Typography variant="h3" sx={{ my: 1, fontWeight: 700, color: 'info.main' }}>
+                      {statistics.knowledge_space_states}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Possible learning progressions
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
 
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Knowledge States
-                  </Typography>
-                  <Typography variant="h4">{statistics.knowledge_space_states}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Possible learning states
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <Card elevation={3} className="stat-card">
+                  <CardContent>
+                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      Semantic Groupings
+                    </Typography>
+                    <Typography variant="h3" sx={{ my: 1, fontWeight: 700 }}>
+                      {statistics.semantic_clusters}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Related item clusters
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
 
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Prerequisites
-                  </Typography>
-                  <Typography variant="h4">{statistics.prerequisites_found}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Concept dependencies
-                  </Typography>
-                </CardContent>
-              </Card>
+              <Grid item xs={12} sm={6} md={4}>
+                <Card elevation={3} className="stat-card">
+                  <CardContent>
+                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      Dependency Ratio
+                    </Typography>
+                    <Typography variant="h3" sx={{ my: 1, fontWeight: 700, color: 'primary.main' }}>
+                      {statistics.total_concepts > 0
+                        ? ((statistics.prerequisites_found / statistics.total_concepts) * 100).toFixed(0)
+                        : 0
+                      }%
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Concepts with prerequisites
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
             </Grid>
-
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Root Concepts
-                  </Typography>
-                  <Typography variant="h4">{statistics.root_concepts}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    No prerequisites required
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Semantic Clusters
-                  </Typography>
-                  <Typography variant="h4">{statistics.semantic_clusters}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Item groupings
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Sorted Items
-                  </Typography>
-                  <Typography variant="h4">{statistics.concepts_sorted_items ?? 'N/A'}</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    By difficulty
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
+          </Box>
         )}
       </TabPanel>
 
@@ -307,21 +412,34 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onRe
       <TabPanel value={tabValue} index={1}>
         {knowledgeSpace ? (
           <Box>
-            <Box sx={{ mb: 3 }}>
+            <Card elevation={3} sx={{ p: 4, textAlign: 'center' }}>
+              <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
+                Interactive Knowledge Space Visualization
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+                Explore the directed acyclic graph (DAG) representing prerequisite relationships 
+                between {statistics?.total_concepts || 0} mathematical concepts.
+              </Typography>
               <Button
                 variant="contained"
                 startIcon={<FullscreenIcon />}
                 onClick={() => setGraphModalOpen(true)}
                 size="large"
+                sx={{ 
+                  py: 1.5, 
+                  px: 4,
+                  fontSize: '1.1rem',
+                }}
               >
                 Open Knowledge Space Graph
               </Button>
-            </Box>
-            <Alert severity="info" icon={<InfoIcon />}>
-              Knowledge Space contains {Object.keys(knowledgeSpace).length} possible learning states
-              in a directed acyclic graph (DAG) representing prerequisite relationships between
-              mathematical concepts.
-            </Alert>
+              <Alert severity="info" icon={<InfoIcon />} sx={{ mt: 4, textAlign: 'left' }}>
+                <strong>Knowledge Space contains {Object.keys(knowledgeSpace).length} possible learning states</strong>
+                <br />
+                Each state represents a unique combination of mastered concepts, 
+                with edges showing valid learning progressions based on prerequisite relationships.
+              </Alert>
+            </Card>
           </Box>
         ) : (
           <Alert severity="warning">Knowledge space data not available</Alert>
@@ -331,39 +449,57 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onRe
       {/* Files Tab */}
       <TabPanel value={tabValue} index={2}>
         {files.length > 0 ? (
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                  <TableCell>File Name</TableCell>
-                  <TableCell align="right">Size (KB)</TableCell>
-                  <TableCell align="center">Action</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {files.map((file, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell>{file.name}</TableCell>
-                    <TableCell align="right">{(file.size / 1024).toFixed(2)}</TableCell>
-                    <TableCell align="center">
-                      <Button
-                        startIcon={<GetAppIcon />}
-                        onClick={() => handleDownloadFile(file.path, file.name)}
-                        size="small"
-                        variant="outlined"
-                      >
-                        Download
-                      </Button>
+          <Card elevation={3}>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: 'primary.main' }}>
+                    <TableCell sx={{ color: 'white', fontWeight: 600, fontSize: '1rem' }}>
+                      File Name
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: 'white', fontWeight: 600, fontSize: '1rem' }}>
+                      Size (KB)
+                    </TableCell>
+                    <TableCell align="center" sx={{ color: 'white', fontWeight: 600, fontSize: '1rem' }}>
+                      Action
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {files.map((file, idx) => (
+                    <TableRow 
+                      key={idx}
+                      sx={{ 
+                        '&:hover': { backgroundColor: 'action.hover' },
+                        transition: 'background-color 0.2s',
+                      }}
+                    >
+                      <TableCell sx={{ fontSize: '0.95rem' }}>{file.name}</TableCell>
+                      <TableCell align="right" sx={{ fontSize: '0.95rem' }}>
+                        {(file.size / 1024).toFixed(2)}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Tooltip title={`Download ${file.name}`}>
+                          <IconButton
+                            onClick={() => handleDownloadFile(file.path, file.name)}
+                            color="primary"
+                            size="large"
+                          >
+                            <GetAppIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Card>
         ) : (
-          <Alert severity="info">No files available</Alert>
+          <Alert severity="info">No files available for download</Alert>
         )}
       </TabPanel>
+      </Box>
 
       {/* Graph Modal */}
       {knowledgeSpace && (

@@ -2,9 +2,10 @@
 Celery Tasks - Pokreće Learning Space Generator
 
 Ovaj task je **most** između backend-a i learning_space_generator-a.
+Refaktorisano da koristi direct import umesto subprocess za bolju kontrolu i performance.
 """
 
-import subprocess
+import sys
 import json
 import shutil
 from pathlib import Path
@@ -16,6 +17,10 @@ from app.models.task import Task as TaskModel
 from app.models.result import Result
 from app import models  # Ensure all tables registered in metadata
 from app.config import settings
+import logging
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 
 class DatabaseTask(Task):
@@ -32,15 +37,20 @@ class DatabaseTask(Task):
 @celery_app.task(base=DatabaseTask, bind=True)
 def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: str):
     """
-    Pokreće learning_space_generator kao subproces i čuva rezultate u bazu
+    Pokreće learning_space_generator kao Python modul (direct import)
     
     Workflow:
     1. Kopiraj CSV u learning_space_generator/data/
-    2. Pokreni learning_space_generator subprocess
-    3. Parsiruj output i ažuriraj progress u bazi
-    4. Sačekaj završetak
-    5. Učitaj rezultate iz learning_space_generator/output/
-    6. Sačuvaj rezultate u PostgreSQL
+    2. Import LSG servisa direktno (umesto subprocess)
+    3. Izvršavaj pipeline korake sa progress tracking
+    4. Učitaj rezultate iz learning_space_generator/output/
+    5. Sačuvaj rezultate u PostgreSQL
+    
+    Prednosti direct import pristupa:
+    - Brže izvršavanje (nema subprocess overhead)
+    - Bolja kontrola grešaka
+    - Direktan pristup return values
+    - Lakše testiranje
     """
     
     db = self.db
@@ -72,45 +82,136 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         target_csv = lsg_data_path / csv_filename
         shutil.copy(csv_path, target_csv)
         
-        task.message = "Starting Learning Space Generator..."
+        task.message = "Initializing Learning Space Generator..."
         task.progress = 10
         db.commit()
         
-        # Pokreni learning_space_generator
-        venv_python = lsg_path / ".venv" / "bin" / "python" if (lsg_path / ".venv" / "bin").exists() else "python"
-        script = lsg_path / settings.LSG_SCRIPT
+        # Dodaj LSG path u sys.path za import
+        if str(lsg_path) not in sys.path:
+            sys.path.insert(0, str(lsg_path))
         
-        process = subprocess.Popen(
-            [str(venv_python), str(script), "all"],
-            cwd=str(lsg_path),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1
+        # Import LSG servisa (direct import umesto subprocess)
+        try:
+            from learning_space_generator.app.services.preprocessing_service import preprocessing_service
+            from learning_space_generator.app.services.semantic_service import semantic_service
+            from learning_space_generator.app.services.concept_aggregation_service import concept_aggregation_service
+            from learning_space_generator.app.services.difficulty_service import DifficultyService
+            from learning_space_generator.app.services.structure_service import structure_service
+            from learning_space_generator.app.services.knowledge_space_service import knowledge_space_service
+            from learning_space_generator.app.services.visualization_service import visualization_service
+            from learning_space_generator.app.services.validation_service import validation_service
+            from learning_space_generator.app.services.ontology_service import ontology_service
+        except ImportError as e:
+            logger.error(f"Failed to import LSG services: {e}")
+            raise RuntimeError(f"Cannot import Learning Space Generator modules: {e}")
+        
+        # === STEP 1: Preprocessing ===
+        logger.info("STEP 1: Preprocessing")
+        task.message = "DAE preprocessing..."
+        task.progress = 15
+        db.commit()
+        
+        preprocessing_service.run_preprocessing()
+        
+        task.progress = 20
+        task.message = "Preprocessing completed"
+        db.commit()
+        
+        # === STEP 2: Semantic Clustering ===
+        logger.info("STEP 2: Semantic Clustering")
+        task.message = "LLM classification and semantic clustering..."
+        task.progress = 25
+        db.commit()
+        
+        semantic_service.run_semantic_classification()
+        
+        task.progress = 35
+        task.message = "Semantic clustering completed"
+        db.commit()
+        
+        # === STEP 3: Concept Aggregation ===
+        logger.info("STEP 3: Concept Aggregation")
+        task.message = "Aggregating items into concepts..."
+        task.progress = 45
+        db.commit()
+        
+        concept_aggregation_service.run_aggregation_pipeline(
+            binarize=True,
+            binarize_threshold=0.5
         )
         
-        # Parsiranje output-a za progress - traži eksplicitne PROGRESS: markere
-        for line in process.stdout:
-            # Traži eksplicitan PROGRESS marker u formatu: PROGRESS:XX:Message
-            if line.startswith("PROGRESS:"):
-                try:
-                    parts = line.strip().split(":", 2)
-                    if len(parts) >= 3:
-                        progress_value = int(parts[1])
-                        progress_message = parts[2]
-                        task.progress = progress_value
-                        task.message = progress_message
-                        db.commit()
-                except (ValueError, IndexError):
-                    pass  # Ignoriši loše formatirane progress linije
+        task.progress = 50
+        task.message = "Concept aggregation completed"
+        db.commit()
         
-        # Sačekaj završetak
-        return_code = process.wait()
+        # === STEP 4: Difficulty Analysis ===
+        logger.info("STEP 4: Difficulty Analysis")
+        task.message = "Analyzing item difficulties..."
+        task.progress = 55
+        db.commit()
         
-        if return_code != 0:
-            stderr_output = process.stderr.read() if process.stderr else "Unknown error"
-            raise RuntimeError(f"Learning Space Generator failed: {stderr_output}")
+        difficulty_service = DifficultyService()
+        difficulty_service.run_difficulty_analysis()
         
+        task.progress = 60
+        task.message = "Difficulty analysis completed"
+        db.commit()
+        
+        # === STEP 5: Structure Extraction (IITA) ===
+        logger.info("STEP 5: Structure Extraction (IITA)")
+        task.message = "Extracting prerequisite structure..."
+        task.progress = 65
+        db.commit()
+        
+        structure_service.run_extraction()
+        
+        task.progress = 70
+        task.message = "Structure extraction completed"
+        db.commit()
+        
+        # === STEP 6: Knowledge Space Generation ===
+        logger.info("STEP 6: Knowledge Space Generation")
+        task.message = "Generating knowledge space states..."
+        task.progress = 75
+        db.commit()
+        
+        knowledge_space_service.generate_states()
+        
+        task.progress = 80
+        task.message = "Knowledge space generation completed"
+        db.commit()
+        
+        # === STEP 7: Visualization ===
+        logger.info("STEP 7: Visualization")
+        task.message = "Generating visualizations..."
+        task.progress = 85
+        db.commit()
+        
+        visualization_service.generate_static_graph()
+        
+        task.progress = 88
+        task.message = "Visualization completed"
+        db.commit()
+        
+        # === STEP 8: Validation ===
+        logger.info("STEP 8: Validation")
+        validation_service.validate_structure()
+        validation_service.semantic_validation_check()
+        
+        # === STEP 9: Ontology Export ===
+        logger.info("STEP 9: Ontology Export")
+        task.message = "Exporting RDF/TTL ontology..."
+        task.progress = 90
+        db.commit()
+        
+        ontology_service.generate_ontology()
+        
+        task.progress = 94
+        task.message = "Ontology export completed"
+        db.commit()
+        
+        # === Load and save results ===
+        logger.info("Loading results from output folder...")
         task.message = "Saving results to database..."
         task.progress = 95
         db.commit()

@@ -58,10 +58,6 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart, onBack })
     }
   };
 
-  const handleLabelClick = () => {
-    fileInputRef.current?.click();
-  };
-
   return (
     <Box className="upload-container">
       <Paper className="upload-content" elevation={2}>
@@ -86,7 +82,6 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart, onBack })
             <label
               htmlFor="file-input"
               className="file-input-label"
-              onClick={handleLabelClick}
             >
               <CloudUploadIcon
                 sx={{
