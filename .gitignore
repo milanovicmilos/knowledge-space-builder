@@ -23,10 +23,24 @@ __pycache__/
 
 # Logs
 *.log
+optimization_log.txt
 
 # Output (project-specific)
 output/
 storage_data/
+
+# Backend storage - ignore all data files
+backend/storage/
+learning_space_generator/output/
+learning_space_generator/data/
+
+# Large generated outputs
+output_*/
+*.npy
+
+# Frontend build artifacts
+frontend/dist/
+frontend/node_modules/
 
 # Docker volumes (if extracted)
 postgres_data/
@@ -38,3 +52,6 @@ postgres_data/
 
 # GitHub Actions (keep workflows but ignore artifacts)
 .github/
+
+# Local generated storage (uploads, artifacts) — do not commit
+storage/

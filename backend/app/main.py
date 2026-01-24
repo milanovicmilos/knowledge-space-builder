@@ -1,19 +1,25 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
+
 from app.config import settings
 from app.api.v1.router import api_router
 from app.database import engine, Base
+from app import models  # Ensure models are imported before create_all
 
-# Create tables
+# Create database tables (requires models imported)
 Base.metadata.create_all(bind=engine)
 
+# Initialize FastAPI app
 app = FastAPI(
-    title="Learning Space Generator API",
-    description="API for generating learning spaces using NEAT and IITA algorithms",
-    version="1.0.0"
+    title=settings.PROJECT_NAME,
+    description="Web interface for Knowledge Space Generator - Bridge between frontend and LSG algorithm",
+    version=settings.PROJECT_VERSION,
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json"
 )
 
-# CORS
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -22,15 +28,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API router
+# Include API routes
 app.include_router(api_router, prefix="/api/v1")
 
 
 @app.get("/")
 async def root():
-    return {"message": "Learning Space Generator API", "version": "1.0.0"}
+    return {
+        "message": settings.PROJECT_NAME,
+        "version": settings.PROJECT_VERSION,
+        "status": "ready",
+        "role": "Bridge between frontend and Learning Space Generator"
+    }
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "service": "learning-space-generator-api"}
+
+
+@app.get("/api/health")
+async def api_health():
+    return {"status": "ok", "service": "learning-space-generator-api"}
+

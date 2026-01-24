@@ -1,50 +1,44 @@
-from pydantic import BaseModel
+"""
+Task Pydantic schemas
+"""
+
 from datetime import datetime
-from typing import Dict, Any
+from typing import Optional, Dict, Any
+from pydantic import BaseModel, ConfigDict
 
 
-class TaskParameters(BaseModel):
-    # Algorithm selection
-    use_iita: bool = False
-    
-    # IITA options
-    iita_max_diff: float = 0.08
-    
-    # NEAT options
-    generations: int = 50
-    patience: int = 20
-    parallel: bool = True
-    greedy: bool = False  # Run until first valid solution
-    plot: bool = False  # Show graph during evolution
-    
-    # Data options
-    randomize_items: bool = False
-    use_matrix_completion: bool = True
-    clear_cache: bool = False
-    
-    # Output options
-    generate_png: bool = True  # Generate PNG visualization
-    png_filename: str | None = None
-
-
-class TaskCreate(BaseModel):
-    upload_id: int
-    parameters: TaskParameters
-
-
-class TaskResponse(BaseModel):
-    id: int
+class TaskBase(BaseModel):
     upload_id: int
     status: str
-    celery_task_id: str | None
-    parameters: Dict[str, Any]
-    progress_percent: int
-    current_generation: int | None
-    progress_details: Dict[str, Any] | None
-    error_message: str | None
-    created_at: datetime
-    started_at: datetime | None
-    completed_at: datetime | None
+    progress: int
+    message: str
+    parameters: Dict[str, Any] = {}
+
+
+class TaskCreate(TaskBase):
+    pass
+
+
+class TaskStatus(BaseModel):
+    task_id: int
+    status: str
+    progress: int
+    message: str
+    created_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskResponse(TaskBase):
+    id: int
+    celery_task_id: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+

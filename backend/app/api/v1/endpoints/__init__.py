@@ -1,1 +1,1 @@
-# Endpoints package
+# Analysis endpoints

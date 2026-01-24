@@ -1,12 +1,15 @@
-from app.schemas.upload import UploadResponse, UploadCreate
-from app.schemas.task import TaskResponse, TaskCreate, TaskParameters
-from app.schemas.result import ResultResponse
+"""
+Pydantic schemas za API validaciju
+"""
+
+from .upload import UploadResponse
+from .task import TaskResponse, TaskStatus
+from .result import ResultResponse, ResultStatistics
 
 __all__ = [
     "UploadResponse",
-    "UploadCreate",
     "TaskResponse",
-    "TaskCreate",
-    "TaskParameters",
+    "TaskStatus",
     "ResultResponse",
+    "ResultStatistics"
 ]

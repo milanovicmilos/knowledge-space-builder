@@ -1,93 +1,135 @@
-import { useState } from 'react';
-import { FiUpload } from 'react-icons/fi';
-import { uploadCSV } from '../api/client';
-import type { Upload } from '../types/api';
+import React, { useState } from 'react';
 import './UploadForm.css';
+import {
+  Box,
+  Button,
+  Typography,
+  Paper,
+  IconButton,
+} from '@mui/material';
+import {
+  Assessment as AssessmentIcon,
+  Description as DescriptionIcon,
+  ArrowBack as ArrowBackIcon,
+  CloudUpload as CloudUploadIcon,
+} from '@mui/icons-material';
+import analysisAPI from '../api/analysis';
 
 interface UploadFormProps {
-  onUploadComplete?: (upload: Upload) => void;
+  onUploadStart: (taskId: string) => void;
+  onBack: () => void;
 }
 
-export function UploadForm({ onUploadComplete }: UploadFormProps) {
+export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart, onBack }) => {
   const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const MAX_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const selectedMeta = file
-    ? `${(file.size / 1024).toFixed(1)} KB · ${file.type || 'text/csv'}`
-    : null;
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      if (selectedFile.name.endsWith('.csv')) {
+        setFile(selectedFile);
+        setError(null);
+      } else {
+        setError('Please select a CSV file');
+        setFile(null);
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (!file) {
+      setError('Please select a file');
+      return;
+    }
 
-    setUploading(true);
+    setLoading(true);
     setError(null);
 
     try {
-      // Client-side size guard for quick feedback
-      if (file.size > MAX_SIZE_BYTES) {
-        setError('File exceeds 100MB limit. Please upload a smaller file.');
-        setUploading(false);
-        return;
-      }
-      const upload = await uploadCSV(file);
-      onUploadComplete?.(upload);
-      setFile(null);
-    } catch (err: any) {
-      if (err?.response?.status === 413) {
-        setError('File exceeds 100MB limit. Please upload a smaller file.');
-      } else {
-        setError(err?.response?.data?.detail || 'Upload failed');
-      }
-    } finally {
-      setUploading(false);
+      const result = await analysisAPI.runAnalysis(file);
+      onUploadStart(result.task_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload file');
+      setLoading(false);
     }
   };
 
   return (
-    <div className="panel upload-card">
-      <div className="panel-head">
-        <div>
-          <p className="kicker">Step 1 · Data upload</p>
-          <h3>Import CSV dataset</h3>
-          <p className="hint">Assessment data (rows = subjects, columns = items, values 0/1).</p>
-        </div>
-        <div className="pill soft">Server-side validation</div>
-      </div>
+    <Box className="upload-container">
+      <Paper className="upload-content" elevation={2}>
+        <Box className="upload-header">
+          <Box className="upload-title">
+            <IconButton onClick={onBack} size="small" sx={{ mr: 1 }}>
+              <ArrowBackIcon />
+            </IconButton>
+            <AssessmentIcon sx={{ color: 'primary.main' }} />
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              New Analysis
+            </Typography>
+          </Box>
+        </Box>
 
-      <form className="upload-form" onSubmit={handleSubmit}>
-        <label className="dropzone">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            disabled={uploading}
-          />
-          {file ? (
-            <div className="file-meta">
-              <span className="file-name">{file.name}</span>
-              <span className="file-size">{selectedMeta}</span>
-            </div>
-          ) : (
-            <div>
-              <p className="drop-title">Drag and drop or select CSV</p>
-              <p className="drop-sub">Max 100MB · UTF-8 · delimiter auto-detected</p>
-            </div>
-          )}
-        </label>
+        <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
+          Upload your CSV file to generate a knowledge space
+        </Typography>
 
-        <div className="upload-actions">
-          <button type="submit" className="primary-btn" disabled={!file || uploading}>
-            <FiUpload size={16} style={{ marginRight: '0.5rem' }} />
-            {uploading ? 'Uploading...' : 'Upload and validate'}
-          </button>
-          <p className="hint">Data is not persisted; used only for the current analysis session.</p>
-        </div>
-      </form>
+        <form onSubmit={handleSubmit} className="upload-form">
+          <Box className="file-input-wrapper">
+            <label
+              htmlFor="file-input"
+              className="file-input-label"
+            >
+              <CloudUploadIcon
+                sx={{
+                  fontSize: 40,
+                  display: 'block',
+                  mb: 1,
+                  color: 'primary.main',
+                }}
+              />
+              {file ? file.name : 'Choose CSV file...'}
+            </label>
+            <input
+              ref={fileInputRef}
+              id="file-input"
+              type="file"
+              accept=".csv"
+              onChange={handleFileChange}
+              disabled={loading}
+              className="file-input"
+            />
+          </Box>
 
-      {error && <div className="error-banner">{error}</div>}
-    </div>
+          {error && <Box className="error-message">{error}</Box>}
+
+          <Button
+            type="submit"
+            disabled={!file || loading}
+            variant="contained"
+            fullWidth
+            sx={{ mt: 2 }}
+          >
+            {loading ? 'Uploading...' : 'Start Analysis'}
+          </Button>
+        </form>
+
+        <Box className="info-box">
+          <Typography component="div" className="info-box h3">
+            <DescriptionIcon sx={{ fontSize: 20 }} />
+            Expected CSV Format
+          </Typography>
+          <Typography component="ul" sx={{ m: 0, pl: 2 }}>
+            <Typography component="li">First row: Column headers (student ID, item IDs)</Typography>
+            <Typography component="li">Rows: Student responses (0 = incorrect, 1 = correct)</Typography>
+            <Typography component="li">Columns: Student ID + Item responses</Typography>
+            <Typography component="li">Example: student_id,s1m11a091,s1m11a101,s1m12a191...</Typography>
+          </Typography>
+        </Box>
+      </Paper>
+    </Box>
   );
-}
+};

@@ -1,0 +1,18 @@
+pandas
+numpy
+# Force CPU-only torch; per-requirement index keeps install small and avoids CUDA deps
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.3.1+cpu
+scikit-learn
+matplotlib
+seaborn
+networkx
+pypdf
+pydantic
+fastapi
+uvicorn
+python-dotenv
+openai
+rdflib
+sentence-transformers
+

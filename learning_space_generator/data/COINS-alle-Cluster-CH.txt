@@ -1,0 +1,1064 @@
+
+--- PAGE 1 ---
+Mastertestheft–Mathematiktest
+Version C (St.Gallen)
+sortiert nach Clustern
+Projekt COINS
+1. Dezember 2023
+--- PAGE 2 ---
+Cluster A
+Aufgabe 1
+m24b401
+IchdenkemireineZahl.WennichzudieserZahl8addiereunddasErgebnisverdreifache,erhalte
+ich gleich viel, wie wenn ich zum Neunfachen der Zahl noch 6 addiere.
+Schreibe die passende Gleichung zum Text auf. (Du brauchst die Gleichung nicht zu lösen.)
+.......................................... = ..........................................
+R
+Platz für Notizen:
+1
+--- PAGE 3 ---
+Aufgabe 2
+m31b481
+Du siehst hier eine Wertetabelle mit Koordinaten von Punkten, die auf einer Geraden liegen.
+x −5 −4 0 2 5
+y 17 14 2 −4 −13
+Eine zweite Gerade verläuft parallel dazu. Vervollständige die Wertetabelle entsprechend.
+a2R b2R c2R
+d2R
+x −5 −4 0 2 5
+y 4
+Platz für Notizen:
+2
+--- PAGE 4 ---
+Aufgabe 3
+m34a281
+Antonia, Belinda und Cem verdienen in den Ferien Sackgeld mit unterschiedlichen Ferienjobs.
+AntoniaverdientdoppeltsovielwieBelinda.Cemverdientinsgesamt5CHFwenigeralsBelinda.
+Welche der folgenden Tabellen passen zur obigen Situation?
+Kreuze alle richtigen Antworten an.
+Antonia 2x Antonia 2(x+5)
+2 2
+a0,1 Belinda x b0,1 Belinda x+5
+Cem x−5 Cem x
+Antonia x Antonia 2x+10
+2
+2 2
+c0,1 Belinda x d0,1 Belinda x−5
+Cem x+5 Cem x
+Platz für Notizen:
+3
+--- PAGE 5 ---
+Aufgabe 4 Bergbahn
+In der folgenden Tabelle sind einige Daten zu 5 Bergbahnen zusammengefasst.
+Bahn 1 Bahn 2 Bahn 3 Bahn 4 Bahn 5
+Talstation 580m 820m 1123m 556m 949m
+Bergstation 1170m / 1755m 953m 1115m
+Projektion 546m / 981m 668m /
+max. Steigung 140% 127% 80% 50% /
+Fahrgeschwindigkeit / 4m/s 10m/s 3m/s 3,1m/s
+Die so genannte „Projektion“ beschreibt dieje-
+nige Strecke, die die Bahn bei der Fahrt von der
+Tal- zur Bergstation in horizontaler Richtung
+überwindet. Zum Beispiel beträgt bei Bahn 1
+die Projektion 546m.
+(Abbildung:Affolteretal.(2014).Mathbuch2,S.43[1.Auflage])
+Aufgabe 4.1
+m32a011
+Schau dir in der Tabelle die Werte für Bahn 1 an. Wie gross ist die durchschnittliche Steigung?
+Kreuze die richtige Antwort an.
+2
+0,93
+1
+2
+1,08
+2
+2
+1,40
+3
+2
+2,14
+4
+4
+--- PAGE 6 ---
+Platz für Notizen:
+5
+--- PAGE 7 ---
+Aufgabe 4.2
+m33a012
+Die Geradengleichung y = 0,7x + 820 beschreibt für Bahn 2 (siehe Tabelle auf Seite 4) den
+Zusammenhang zwischen der Höhe y der Bergbahn und der bereits zurückgelegten Projektion
+x.
+Welche Projektion wurde in einer Höhe von 840m bereits ungefähr zurückgelegt?
+Kreuze die richtige Antwort an.
+2
+14m
+1
+2
+29m
+2
+2
+588m
+3
+2
+1408m
+4
+Platz für Notizen:
+6
+--- PAGE 8 ---
+Aufgabe 4.3
+m22a013
+Wie lautet die Geradengleichung bei Bahn 3 (siehe Tabelle auf Seite 4)?
+Kreuze die richtige Antwort an.
+2 y = (1755−1123) ·x+1755
+1 981
+2 y = (1755−1123) ·x+1123
+2 981
+2
+y = 981 ·x+1755
+3 (1755−1123)
+2
+y = 981 ·x+1123
+4 (1755−1123)
+Platz für Notizen:
+7
+--- PAGE 9 ---
+Aufgabe 5
+m23b651
+Gegeben ist die folgende Gleichung: x+2 = 2x.
+Stelle eine andere Gleichung auf, die auf beiden Seiten ein x aufweist und x denselben Wert wie
+bei der gegebenen Gleichung hat.
+.......................................... = ..........................................
+R
+Platz für Notizen:
+8
+--- PAGE 10 ---
+Aufgabe 6
+m11b141
+Gegeben ist die Geradengleichung y = 3x +4.
+5
+Bestimme die Steigung.
+Steigung a = ........................................................
+R
+Platz für Notizen:
+9
+--- PAGE 11 ---
+Aufgabe 7
+m21a231
+Welche der folgenden Schritte sind Äquivalenzumformungen?
+Kreuze alle richtigen Antworten an.
+2
+Auf beiden Seiten der Gleichung die gleiche Zahl addieren.
+a0,1
+2
+Auf beiden Seiten der Gleichung mit der gleichen positiven Zahl multiplizieren.
+b0,1
+2
+Auf einer Seite der Gleichung durch eine positive Zahl dividieren.
+c0,1
+2
+Auf einer Seite der Gleichung eine Zahl addieren und auf der anderen Seite die gleiche
+d0,1
+Zahl subtrahieren.
+Platz für Notizen:
+10
+--- PAGE 12 ---
+Aufgabe 8
+m12b201
+Schau dir folgende Wertetabelle an:
+x −3 −2 −1 0 1 2 3
+y −16 −12 −8 −4 0 4 8
+Zeichne die dazu passende Gerade in das vorgegebene Koordinatensystem ein.
+11
+--- PAGE 13 ---
+Platz für Notizen:
+12
+--- PAGE 14 ---
+Cluster B
+Aufgabe 1
+m11a101
+Betrachte die Gleichung 8+ 1x = 1 ·(x−16).
+4 2
+Welche der folgenden Lösungen ist korrekt?
+Kreuze die richtige Antwort an.
+2
+x = 96
+1
+2
+x = 4
+2
+2
+x = 0
+3
+2
+x = 64
+4
+Platz für Notizen:
+13
+--- PAGE 15 ---
+Aufgabe 2 E-Scooter
+Aufgabe 2.1
+m12b021
+Die folgende Gerade beschreibt näherungsweise den Mietpreis (in CHF) für einen E-Scooter
+abhängig von der Zeit (in min). Die Kosten werden pro Minute abgerechnet.
+Fülle mithilfe der oberen Abbildung die folgende Wertetabelle aus.
+a1R
+b2Rc2Rd2R
+Zeit (in min) 3 5 10
+Preis(inCHF) 2.60
+Platz für Notizen:
+14
+--- PAGE 16 ---
+Aufgabe 2.2
+m22a022
+WelchenMietpreismussFabianzahlen,wennerfür30mineinenE-Scooterausleiht(sieheGrafik
+auf Seite 14)?
+Kreuze den richtigen Betrag an.
+2
+6CHF
+1
+2
+7CHF
+2
+2
+8CHF
+3
+2
+9CHF
+4
+2
+12CHF
+5
+2
+30CHF
+6
+Platz für Notizen:
+15
+--- PAGE 17 ---
+Aufgabe 2.3
+m34b023
+Die Grundgebühr für die Miete eines E-Scooters beträgt 1CHF. Das kannst du in der Grafik
+auf Seite 14 ablesen.
+Gib die Steigung der Geraden an und erkläre, was dein gefundener Wert für den Mietpreis des
+E-Scooters bedeutet.
+Die Steigung der Geraden beträgt: ............................
+aR
+Dieses Ergebnis bedeutet für den Mietpreis:
+bR
+Platz für Notizen:
+16
+--- PAGE 18 ---
+Aufgabe 3
+m24a421
+Mona und Ole sammeln dieselben Karten. Sie stellen fest: Ole hat dreimal so viele Karten wie
+Mona. Zusammen haben sie 36 Karten.
+Welche der folgenden Gleichungen passt zu dieser Situation?
+Kreuze die richtige Antwort an.
+2
+3x = 36
+1
+2
+x+3 = 36
+2
+2
+x+3x = 36
+3
+2
+3x+36 = x
+4
+Platz für Notizen:
+17
+--- PAGE 19 ---
+Aufgabe 4
+m32b062
+Der folgende Graph beschreibt den zeitlichen Verlauf der Erwärmung einer bestimmten Menge
+Wasser. Für eine spezielle Teesorte wird eine Temperatur von exakt 75°C benötigt.
+Wie lange muss das Wasser erhitzt werden, um exakt die Temperatur von 75°C zu erreichen?
+R
+18
+--- PAGE 20 ---
+Aufgabe 5
+m31a461
+Bei welchen der folgenden Gleichungen schneidet die Gerade die x-Achse an der Stelle x = 3?
+Kreuze alle richtigen Antworten an.
+2
+y = 3(x−3)
+a0,1
+2
+y = 2x−3
+b0,1
+2
+y = 0,5x+3
+c0,1
+2
+y = 0,5(x−1)−1
+d0,1
+Platz für Notizen:
+19
+--- PAGE 21 ---
+Aufgabe 6 Rolltreppen
+Um die ungefähre Steigung einer üblichen Rolltreppe zu bestimmen, wurden verschiedene Fotos
+gemacht.
+(a) BildA (b) BildB
+(c) BildC (d) BildD
+Aufgabe 6.1
+m21b261
+Welches Bild ist zur Berechnung einer Steigung geeignet?
+Geeignet ist Bild ............................
+aR
+Begründung:
+bR
+20
+--- PAGE 22 ---
+Platz für Notizen:
+21
+--- PAGE 23 ---
+Aufgabe 6.2
+m21b262
+Erkläre, welche Angaben du brauchst, um die Steigung einer Rolltreppe zu berechnen.
+R
+22
+--- PAGE 24 ---
+Aufgabe 7
+m23a301
+Im Folgenden sind zwei allgemeingültige Gleichungen abgebildet:
+x = x
+2(x+3) = 2x+6
+Welche der folgenden Aussagen gelten bei einer allgemeingültigen Gleichung?
+Kreuze die richtige Antwort an.
+2
+Es gibt nur eine oder zwei Lösungen.
+1
+2
+Eine allgemeingültige Gleichung lässt sich in die Form 10 = 10 umformen.
+2
+2
+Eine allgemeingültige Gleichung lässt sich in die Form 4x+6 = 0 umformen.
+3
+2
+Es gibt nur ganzzahlige Lösungen.
+4
+Platz für Notizen:
+23
+--- PAGE 25 ---
+Aufgabe 8
+m33b571
+Die Gerade g verläuft durch den Punkt P(0|2,4). Diese Gerade ist in der folgenden Abbildung
+dargestellt.
+Suche eine zweite Gerade h, die ebenfalls durch den Punkt P verläuft, jedoch nur halb so stark
+fällt wie die Gerade g. Zeichne die Gerade h ins Koordinatensystem ein.
+Platz für Notizen:
+24
+--- PAGE 26 ---
+Cluster C
+Aufgabe 1
+m33a531
+Im Folgenden siehst du Paare von Geradengleichungen. Welche der zugehörigen Geraden sind
+parallel?
+Kreuze die richtige Antwort an.
+2
+y = 40x und y = 3x
+1
+2
+y = 2·(4x+1) und y = 5x−3
+2
+2
+y = 7−6x und y = 3·(3−2x)
+3
+2
+y = x+2 und y = 8
+4
+Platz für Notizen:
+25
+--- PAGE 27 ---
+Aufgabe 2
+Aufgabe 2.1
+m22b043
+Die beiden Kästchen (siehe Situation 1) zeigen eine Situation, die auf zwei verschiedene Arten
+dargestellt ist.
+Situation 1:
+Gleichung: Visualisierung:
+x + 1 = 3
+Stelle nun zur nächsten Gleichung (siehe Situation 2) die passende Darstellung mit Kugeln
+und Beuteln auf. Zeichne die Gleichung mithilfe der Gegenstände (Kugeln und Beutel) in das
+Kästchen zur Visualisierung. Achte darauf, dass man die Kugeln und die Beutel eindeutig un-
+terscheiden kann.
+Situation 2:
+R
+Gleichung: Visualisierung:
+5x = 3x + 4
+=
+Platz für Notizen:
+26
+--- PAGE 28 ---
+Aufgabe 2.2
+m31b044
+DiefolgendenbeidenSituationenAundBzeigenjeweilsBeutel,diemitKugelngefülltsind,und
+einzelne herumliegende Kugeln. In allen abgebildeten Beuteln befinden sich gleich viele Kugeln.
+WievieleKugelnmüssenjeweilsineinemBeutelsein,damitesinSituationAinsgesamtgenauso
+viele Kugeln gibt wie in Situation B? Zeichne die Anzahl an Kugeln direkt in die Beutel.
+Situation A: Situation B:
+Platz für Notizen:
+27
+--- PAGE 29 ---
+Aufgabe 3
+m12b211
+Du siehst unten zwei Geraden, die jeweils in einem Koordinatensystem eingezeichnet wurden.
+Vergleiche die Steigungen der beiden Geraden.
+Entscheide, ob sie gleich oder unterschiedlich sind und begründe deine Antwort.
+Die beiden Geraden haben ...
+a
+2
+...die gleiche Steigung.
+1
+2
+...nicht die gleiche Steigung.
+2
+Begründung:
+bR
+Platz für Notizen:
+28
+--- PAGE 30 ---
+Aufgabe 4
+m24a391
+Im Folgenden wird die Anzahl der Mädchen einer Klasse mit M und die Anzahl der Jungen mit
+J bezeichnet.
+Welchen Zusammenhang drückt die folgende Gleichung aus?
+M = 3J
+Kreuze die richtige Antwort an.
+2
+Es gibt dreimal so viele Mädchen wie Jungen in der Klasse.
+1
+2
+Es gibt dreimal so viele Jungen wie Mädchen in der Klasse.
+2
+2
+Es gibt 3 Jungen mehr als Mädchen in der Klasse.
+3
+2
+Es gibt 3 Mädchen mehr als Jungen in der Klasse.
+4
+Platz für Notizen:
+29
+--- PAGE 31 ---
+Aufgabe 5 Geraden und Geradengleichungen
+Betrachte die Geraden A–E im folgenden Koordinatensystem.
+Aufgabe 5.1
+m32a031
+Ordne den Geraden A, B, C und E die passende Geradengleichung zu, indem du sie jeweils
+verbindest.
+y = −x+1
+1
+y = x+1
+2
+a Gerade A 3 y = −5x−3
+b Gerade B 4 y = 2x+5
+c Gerade C 5 y = −2x+2
+d Gerade E 6 y = −3x−3
+y = −0,5x+2
+7
+y = 3x+5
+8
+30
+--- PAGE 32 ---
+Platz für Notizen:
+31
+--- PAGE 33 ---
+Aufgabe 5.2
+m21b032
+Begründe, warum die Gerade D kein Graph einer Geradengleichung ist.
+R
+Platz für Notizen:
+32
+--- PAGE 34 ---
+Aufgabe 6
+m34a631
+Deniz,LuisaundAshleyhabenunterschiedlichvieleStifteimEtui.DenizhathalbsovieleStifte
+wie Luisa. Ashley hat 6 Stifte mehr als Deniz.
+Welche der folgenden Terme passen zu der vorgegebenen Situation?
+Kreuze die richtige Antwort an.
+Luisa 2x Luisa x
+2 2
+1 Deniz x 2 Deniz x
+2
+Ashley x+6 Ashley x+6
+Deniz 2x Deniz x
+2 2
+3 Luisa x 4 Luisa x
+2
+Ashley 2x+6 Ashley x +6
+2
+Platz für Notizen:
+33
+--- PAGE 35 ---
+Aufgabe 7
+m23b331
+Im folgenden Koordinatensystem ist die Gerade g abgebildet. Die Gerade g verläuft durch die
+Punkte P(0|1) und Q(10|3).
+Finde eine Gerade h, die den Punkt Q schneidet und gleichzeitig eine kleinere positive Steigung
+als die Gerade g besitzt. Zeichne die Gerade h ins Koordinatensystem ein.
+Platz für Notizen:
+34
+--- PAGE 36 ---
+Aufgabe 8
+m11a091
+Du siehst eine Wertetabelle abgebildet, die zu einer Geradengleichung gehört.
+x −5 −1 1 7
+y 11 5 2
+Welcher y-Wert gehört zu x = 7?
+Kreuze die richtige Antwort an.
+2
+5
+1
+2
+−7
+2
+2
+−5
+3
+2
+−1
+4
+Platz für Notizen:
+35
+--- PAGE 37 ---
+Cluster D
+Aufgabe 1
+m12a671
+Welche der Steigungsdreiecke entsprechen einer Steigung von 2?
+Kreuze alle richtigen Antworten an.
+2
+A
+a0,1
+2
+B
+b0,1
+2
+C
+c0,1
+2
+D
+d0,1
+2
+E
+e0,1
+36
+--- PAGE 38 ---
+2
+F
+f0,1
+Platz für Notizen:
+37
+--- PAGE 39 ---
+Aufgabe 2
+m31a471
+Welche der folgenden Gleichungen haben eine eindeutige Lösung für x?
+Kreuze alle richtigen Antworten an.
+2
+7x = 7x
+a0,1
+2
+12−3x = 6
+b0,1
+2
+2−x = 2−x
+c0,1
+2
+12+2x = −6+12
+d0,1
+Platz für Notizen:
+38
+--- PAGE 40 ---
+Aufgabe 3 Wachstum von Bäumen
+Folgende Grafik zeigt den Zusammenhang zwischen dem Alter eines Baumes und dessen Höhe.
+DieserkannnäherungsweisemithilfeeinerGeradebeschriebenwerden.DargestelltsinddieWerte
+für Ahorn, Birke, Buche und Eiche.
+Aufgabe 3.1
+m34b051
+Um sich im Garten eine Hängematte zu befestigen, hat sich Claire in einer Gärtnerei 2 Bäume
+– eine Birke und einen Ahorn – gekauft. Die Bäume sind unterschiedlich alt und werden in 2
+Jahren gleich gross sein. Die Birke ist dann 8 Jahre alt. Wie alt ist dann der Ahorn?
+R
+39
+--- PAGE 41 ---
+Aufgabe 3.2
+m21b052
+Deine Nachbarin erzählt dir, dass sie den Laubbaum in ihrem Garten eingepflanzt hat, als dieser
+als zweijähriger Setzling gerade einmal 70cm hoch war. 8 Jahre später misst er 3,5m. Überprüfe
+mithilfe der Grafik auf Seite 39, um welche Baumart es sich handeln könnte.
+Um welchen Baum handelt es sich? Begründe deine Antwort kurz.
+Es handelt sich um ............................
+aR
+Begründung:
+bR
+Platz für Notizen:
+40
+--- PAGE 42 ---
+Aufgabe 3.3
+m24b053
+In deinem Garten pflanzt du eine 60cm hohe Birke, die jedes Jahr 40cm wächst, neben eine
+Buche, die schon eine Höhe von 2,80m hat und jährlich 30cm wächst. In wie vielen Jahren ist
+die Birke so gross wie die Buche?
+Stelle eine Gleichung auf, mit der du dies berechnen kannst. (Du musst diese nicht lösen.)
+.......................................... = ..........................................
+R
+Platz für Notizen:
+41
+--- PAGE 43 ---
+Aufgabe 3.4
+m32b054
+Der Ahorn wächst sehr schnell. Zeichne das zugehörige Steigungsdreieck ins Koordinatensystem
+auf Seite 39 ein. Berechne, um wie viele Meter die Höhe eines Ahorns pro Jahr zunimmt.
+Notiere deinen Lösungsweg. Gib das Ergebnis in Metern an.
+Der Ahorn nimmt pro Jahr um ............................ Meter zu.
+aR
+Notiere deinen Lösungsweg:
+bR
+42
+--- PAGE 44 ---
+Aufgabe 4
+m11a111
+Welches ist die richtige Lösung der Gleichung?
+4(x+3)+1 = 3(4+x)
+Kreuze die richtige Antwort an.
+2
+x = 0
+1
+2
+x = 1
+2
+2
+x = 2
+3
+2
+x = −1
+4
+2
+x = −2
+5
+2
+x = 8
+6 3
+Platz für Notizen:
+43
+--- PAGE 45 ---
+Aufgabe 5
+m23a311
+Die x- und y-Werte einer Geraden können unterschiedlich zusammenhängen. Welche dieser Zu-
+sammenhänge beschreiben eine Gerade mit einer positiven Steigung (z. B. y = x) und welche
+eine Gerade mit einer negativen Steigung (z. B. y = −x)?
+Kreuze in jeder Zeile die richtige Antwort an.
+Gerade mit Gerade mit
+positiver Steigung negativer Steigung
+2 2
+Je grösser der x-Wert, desto grösser der y-Wert.
+a1 a2
+2 2
+Je grösser der x-Wert, desto kleiner der y-Wert.
+b1 b2
+2 2
+Je kleiner der x-Wert, desto grösser der y-Wert.
+c1 c2
+2 2
+Je kleiner der x-Wert, desto kleiner der y-Wert.
+d1 d2
+Platz für Notizen:
+44
+--- PAGE 46 ---
+Aufgabe 6
+m22b511
+Im Koordinatensystem ist eine Gerade abgebildet.
+Gib die Gleichung für eine andere Gerade an, die parallel zur abgebildeten Geraden verläuft.
+y = ........................................................
+R
+Platz für Notizen:
+45
+--- PAGE 47 ---
+Aufgabe 7
+m33a541
+Welche Gleichung wurde richtig gelöst?
+Kreuze die korrekt gelöste Gleichung an.
+5x
+3+
+5x
+= 2
+3+ = 2
+7
+7
+21+5x = 14
+3+5x = 14
+1
+2
+5x = 35
+2
+2 5x = 17
+17
+x = 7 x =
+5
+5x 5x
+3+ = 2 3+ = 2
+7 7
+3+5x = 14 21+5x = 14
+2 5x = 11 2 5x = −7
+3 4
+11 7
+x = x = −
+5 5
+Platz für Notizen:
+46
+--- PAGE 48 ---
+Cluster E
+Aufgabe 1
+m12a191
+Das folgende massstabsgetreue Bild zeigt ein rechtwinkliges Dreieck.
+Welche der folgenden Werte geben die Steigung des Keils an?
+Kreuze alle richtigen Antworten an.
+2
+0,25
+a0,1
+2
+4
+b0,1
+2
+1
+c0,1 4
+2
+4
+d0,1 15
+47
+--- PAGE 49 ---
+Platz für Notizen:
+48
+--- PAGE 50 ---
+Aufgabe 2 Wasserpumpe
+In einem Wasserbehälter befinden sich 800Liter Wasser. Mithilfe einer Pumpe soll dieser Behäl-
+ter gleichmässig entleert werden. Pro Minute werden 10Liter Wasser abgepumpt.
+Aufgabe 2.1
+m32b072
+ZeichneeineGeradeinsKoordinatensystem,diezurSituationpasst.DabeistehtxfürdieZeit(in
+Minuten) und y für die Wassermenge (in Liter).
+Platz für Notizen:
+49
+--- PAGE 51 ---
+Aufgabe 2.2
+m22b073
+Notiere eine Gleichung, mit der du die restliche Wassermenge y (in Liter) berechnen kannst, die
+sich zu einem Zeitpunkt x (in Minuten) in dem Wasserbehälter (Seite 49) befindet.
+y = ........................................................
+R
+Platz für Notizen:
+50
+--- PAGE 52 ---
+Aufgabe 2.3
+m33b074
+In einem zweiten Behälter befinden sich 1200Liter Wasser. Dieser Behälter soll mit einer stär-
+kerenPumpegleichmässigentleertwerden.DiezweitePumpepumptproMinute20LiterWasser
+ab. Beide Pumpen werden zur gleichen Zeit gestartet.
+Nach wie vielen Minuten ist in beiden Behältern noch die gleiche Wassermenge?
+Nach ............................ Minuten.
+aR
+Notiere deinen Lösungsweg:
+bR
+51
+--- PAGE 53 ---
+Aufgabe 3
+m24a371
+Welche der folgenden Gleichungen gehören zu Geraden, die die x-Achse nicht schneiden?
+Kreuze alle richtigen Antworten an.
+2
+y = 2
+a0,1
+2
+y = 2x
+b0,1
+2
+y = −2
+c0,1
+2
+y = −2x
+d0,1
+2
+y = 2x−2
+e0,1
+Platz für Notizen:
+52
+--- PAGE 54 ---
+Aufgabe 4
+m23b351
+Die Gerade f hat die Gleichung y = −12+ 3x.
+4
+Gib die Gleichung einer Geraden g an, die parallel zur Geraden f verläuft und die sich im
+Koordinatensystem stets oberhalb von f befindet.
+y = ........................................................
+R
+Platz für Notizen:
+53
+--- PAGE 55 ---
+Aufgabe 5 Unterschiedliche Lösungswege
+In einer Klasse sollen die Schülerinnen und Schüler eine passende Gerade zur Geradengleichung
+2y = x−6 zeichnen. Dabei gehen sie unterschiedlich vor.
+Aufgabe 5.1
+m34a451
+Schau dir die Lösung von Jana an und beurteile ihr Vorgehen.
+Janasetzt3beliebigeZahlenfürxindieGeradengleichung2y = x−6einundrechnet
+die dazugehörigen y-Koordinaten aus.
+x 0 2 6
+y -3 2 0
+Die so erhaltenen Punkte zeichnet sie im Koordinatensystem ein und verbindet sie.
+Kreuze die richtige Antwort an.
+Jana hat die Aufgabe ...
+2
+...richtig gelöst, da ihre 3 erhaltenen Punkte auf einer Geraden liegen.
+1
+2
+...aufgrund eines Rechenfehlers falsch gelöst, aber ein richtiges Vorgehen gewählt.
+2
+2
+...unvollständig bearbeitet, da sie noch mehr Punkte berechnen müsste.
+3
+2
+...falsch gelöst, da man nicht einfach beliebige Zahlen für x einsetzen darf.
+4
+Platz für Notizen:
+54
+--- PAGE 56 ---
+Aufgabe 5.2
+m31a452
+Schau dir die Lösung von Arda an und beurteile sein Vorgehen.
+Arda stellt die Geradengleichung so um, dass sie nach x aufgelöst ist:
+2y = x−6 |+6
+x = 2y+6
+Nun liest er die Steigung a = 2 und den Schnittpunkt der Geraden mit der y-Achse S(0|6) aus
+der Gleichung ab und zeichnet die Gerade ein.
+Kreuze die richtige Antwort an.
+Arda hat ...
+2
+...die Aufgabe richtig bearbeitet, denn er hat die Gleichung ohne Fehler aufgelöst.
+1
+2
+...ein richtiges Vorgehen gewählt, aber er hat Rechenfehler bei der Umformung gemacht.
+2
+2
+...die Aufgabe falsch gelöst, weil er die Steigung mit dem Schnittpunkt der y-Achse ver-
+3
+wechselt hat.
+2
+...ein falsches Vorgehen gewählt, weil er die Steigung und den y-Achsenabschnitt falsch
+4
+berechnet hat.
+Platz für Notizen:
+55
+--- PAGE 57 ---
+Aufgabe 6
+m11b131
+Zu einer Geraden gehört die Geradengleichung y = 0,4x−3.
+Liegt der Punkt P(20|5) auf der Geraden?
+Kreuze an und notiere deinen Lösungsweg.
+a
+2
+Ja
+1
+2
+Nein
+2
+Lösungsweg:
+bR
+56
+--- PAGE 58 ---
+Aufgabe 7
+m21a241
+Im Folgenden werden Möglichkeiten genannt, wie man von einer Geraden, die durch eine Gera-
+dengleichung y = a·x+b gegeben ist, die Schnittstelle mit der x-Achse bestimmen kann.
+Kreuze jeweils an, ob die Aussage wahr oder falsch ist.
+wahr falsch
+2 2
+Man setzt x = 0 und formt die Gleichung um in y = b. Die Gerade schneidet
+a1 a2
+die x-Achse an der Stelle b.
+2 2
+Man setzt y = 0 und formt die Gleichung um in x = −b. Die Gerade schnei-
+a b1 b2
+det die x-Achse an der Stelle −b.
+a
+2 2
+Man klammert a aus und formt die Gleichung um in y = a·(x+ b). Die
+a c1 c2
+Gerade schneidet die x-Achse an der Stelle −b.
+a
+Platz für Notizen:
+57
+--- PAGE 59 ---
+Cluster F
+Aufgabe 1
+m12a171
+Im Koordinatensystem ist eine Gerade abgebildet.
+Welche Geradengleichung passt zur abgebildeten Geraden?
+Kreuze die richtige Antwort an.
+2
+y = 1x+3
+1
+2
+y = 1x+3
+2 2
+2
+y = 2x−6
+3
+2
+y = 2x+3
+4
+58
+--- PAGE 60 ---
+Platz für Notizen:
+59
+--- PAGE 61 ---
+Aufgabe 2
+m33b561
+Löse die folgende Gleichung schrittweise nach x auf. Notiere dabei jeden Umformungsschritt
+neben den Gleichungen.
+3(x+5) = 10(x+1)
+R
+60
+--- PAGE 62 ---
+Aufgabe 3 Ratenzahlung
+Ein Elektronikgeschäft bietet bei einem Kaufpreis von mindestens 480CHF zwei Varianten für
+eine Ratenzahlung (ohne Zinsen) an.
+Variante 1) Falls genau 120CHF sofort angezahlt werden, soll der Restbetrag in 36 Monatsraten
+zurückgezahlt werden.
+Variante 2) Wenn keine Anzahlung erfolgt, ist der volle Kaufpreis in 24 Monatsraten zurückzu-
+zahlen.
+Die nebenstehende Grafik
+stellt den Verlauf der Kauf-
+preiszahlung für beide Vari-
+anten beispielhaft dar.
+Aufgabe 3.1
+m23a081
+Nach wie vielen Monaten ist der Restbetrag, der bei einem Kaufpreis von 480CHF und einer
+plangemässen Ratenzahlung noch zurückgezahlt werden muss, in beiden Varianten gleich hoch?
+Kreuze die richtige Antwort an.
+2
+nach 11,5Monaten
+1
+2
+nach 12,0Monaten
+2
+2
+nach 12,5Monaten
+3
+2
+nach 13,0Monaten
+4
+Platz für Notizen:
+61
+--- PAGE 63 ---
+Aufgabe 3.2
+m22a082
+BeschreibendiefolgendenGeradengleichungeneineZahlungnachVariante1oderVariante2(sie-
+he Seite 61)?
+Kreuze jeweils die richtige Antwort an.
+y: Restbetrag
+t: Zeitpunkt, zu dem man den Restbetrag anschauen möchte
+Zahlung nach Zahlung nach
+Variante 1 Variante 2
+Kaufpreis (in CHF) Geradengleichung
+2 2
+516 y = (516−120)−11·t
+a1 a2
+2 2
+792 y = 792−t·33
+b1 b2
+2 2
+672 y = −28·t+672
+c1 c2
+2 2
+984 y = 864−24·t
+d1 d2
+Platz für Notizen:
+62
+--- PAGE 64 ---
+Aufgabe 3.3
+m31b083
+Für eine Ratenzahlung nach Variante 1 (siehe Seite 61) kann man anhand der folgenden Glei-
+chung den Restbetrag ermitteln, den man nach t Monaten noch zu zahlen hat:
+y = −t·x+(K −120)
+Dabei entspricht K dem Kaufpreis (in CHF) und x der monatlichen Rate (in CHF).
+Das Elektronikgeschäft bietet einen Computer zum Preis von 948CHF an. Welche monatliche
+Rate x ist nötig, wenn man den Computer in 36 Monaten abbezahlen möchte?
+Monatliche Rate: ............................ CHF.
+aR
+Notiere deinen Lösungsweg:
+bR
+63
+--- PAGE 65 ---
+Aufgabe 3.4
+m34b084
+Franziska möchte sich ein Notebook für 732CHF kaufen. Hierfür hat sie bereits 192CHF an-
+gespart. Sie hat ausgerechnet, dass sie von ihrem Taschengeld monatlich 15CHF zurücklegen
+kann, um das Notebook in Raten abzuzahlen. Kann Franziska damit das Notebook nach Vari-
+ante 1 (siehe Seite 61) bezahlen?
+a
+2
+Ja
+1
+2
+Nein
+2
+Begründe deine Antwort:
+bR
+Platz für Notizen:
+64
+--- PAGE 66 ---
+Aufgabe 4
+m21a291
+Du siehst hier eine Gerade in einem Koordinatensystem eingezeichnet.
+Mit welchen Dreiecken lässt sich die Steigung der Geraden berechnen?
+Kreuze alle richtigen Antworten an.
+Die Steigung der Geraden lässt sich mit ...
+2
+...Dreieck 1 berechnen.
+a0,1
+2
+...Dreieck 2 berechnen.
+b0,1
+2
+...Dreieck 3 berechnen.
+c0,1
+2
+...Dreieck 4 berechnen.
+d0,1
+Platz für Notizen:
+65
+--- PAGE 67 ---
+Aufgabe 5
+m11b151
+Gegeben ist folgende Geradengleichung y = −12+ 3 ·x.
+4
+Wie lautet die Steigung der Geradengleichung?
+Steigung a = ........................................................
+R
+Platz für Notizen:
+66
+--- PAGE 68 ---
+Aufgabe 6
+m32a431
+(Bildquelle:http://www.radroutenplaner.hessen.de,2020)
+In der Abbildung oben ist das Höhenprofil des hessischen Radfernwegs R 4 abgebildet. Mia
+bereitet sich auf eine Radtour auf dem hessischen Radfernweg vor. Die Etappe zwischen Alsfeld
+undUllrichsteinkommtihraufderKartesehrsteilvor.Siemöchteherausfinden,welcheSteigung
+auf diesem Streckenabschnitt auf sie zukommt und fertigt eine Skizze an.
+Mit welcher Skizze kann sie die Steigung zwischen Alsfeld und Ullrichstein ermitteln?
+Kreuze die richtige Skizze an.
+2 2
+1 2
+2 2
+3 4
+Platz für Notizen:
+67
+--- PAGE 69 ---
+Aufgabe 7
+m24b411
+Betrachte das folgende Koordinatensystem mit Schattierung:
+Gib die Gleichung einer Geraden an, die nur im grau schattierten Bereich verläuft.
+Hinweis: Wenn es dir hilft, kannst du die zugehörige Gerade einzeichnen, musst es aber nicht.
+y = ........................................................
+R
+Platz für Notizen:
+68

@@ -1,0 +1,92 @@
+/* Results Dashboard Container */
+.results-dashboard-container {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: auto;
+  padding: 24px 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Header Section - Similar to Home.tsx */
+.results-header {
+  text-align: center;
+  margin-bottom: 48px;
+  animation: fadeInDown 0.6s ease-out;
+}
+
+/* Loading State */
+.results-loading {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 70vh;
+  gap: 24px;
+}
+
+/* Error Container */
+.results-error-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 70vh;
+  padding: 24px;
+}
+
+/* Tabs Container */
+.results-tabs-container {
+  margin-bottom: 32px;
+}
+
+/* Tab Content */
+.results-tab-content {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* Stat Cards */
+.stat-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  height: 100%;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Animations */
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 600px) {
+  .results-dashboard-container {
+    padding: 16px 12px;
+  }
+
+  .results-header {
+    margin-bottom: 32px;
+  }
+}
