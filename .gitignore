@@ -52,3 +52,6 @@ postgres_data/
 
 # GitHub Actions (keep workflows but ignore artifacts)
 .github/
+
+# Local generated storage (uploads, artifacts) — do not commit
+storage/
