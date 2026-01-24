@@ -54,7 +54,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         # Update task status
         task.status = "running"
         task.started_at = datetime.now()
-        task.message = "Pripremanje podataka..."
+        task.message = "Preparing data..."
         task.progress = 5
         db.commit()
         
@@ -72,7 +72,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         target_csv = lsg_data_path / csv_filename
         shutil.copy(csv_path, target_csv)
         
-        task.message = "Pokre ćem Learning Space Generator..."
+        task.message = "Starting Learning Space Generator..."
         task.progress = 10
         db.commit()
         
@@ -89,39 +89,20 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
             bufsize=1
         )
         
-        # Parsiranje output-a za progress
+        # Parsiranje output-a za progress - traži eksplicitne PROGRESS: markere
         for line in process.stdout:
-            lower_line = line.lower()
-            
-            if "preprocessing" in lower_line:
-                task.progress = 15
-                task.message = "DAE preprocessing..."
-            elif "llm" in lower_line or "classification" in lower_line:
-                task.progress = 25
-                task.message = "LLM classification..."
-            elif "semantic" in lower_line or "cluster" in lower_line:
-                task.progress = 35
-                task.message = "Semantic clustering..."
-            elif "aggregation" in lower_line:
-                task.progress = 45
-                task.message = "Concept aggregation..."
-            elif "difficulty" in lower_line:
-                task.progress = 55
-                task.message = "Difficulty analysis..."
-            elif "iita" in lower_line or "extraction" in lower_line:
-                task.progress = 65
-                task.message = "IITA prerequisite extraction..."
-            elif "knowledge" in lower_line or "space" in lower_line:
-                task.progress = 75
-                task.message = "Knowledge space generation..."
-            elif "visualization" in lower_line or "graph" in lower_line:
-                task.progress = 85
-                task.message = "Visualization..."
-            elif "ontology" in lower_line or "rdf" in lower_line:
-                task.progress = 90
-                task.message = "RDF/TTL ontology export..."
-            
-            db.commit()
+            # Traži eksplicitan PROGRESS marker u formatu: PROGRESS:XX:Message
+            if line.startswith("PROGRESS:"):
+                try:
+                    parts = line.strip().split(":", 2)
+                    if len(parts) >= 3:
+                        progress_value = int(parts[1])
+                        progress_message = parts[2]
+                        task.progress = progress_value
+                        task.message = progress_message
+                        db.commit()
+                except (ValueError, IndexError):
+                    pass  # Ignoriši loše formatirane progress linije
         
         # Sačekaj završetak
         return_code = process.wait()
@@ -130,7 +111,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
             stderr_output = process.stderr.read() if process.stderr else "Unknown error"
             raise RuntimeError(f"Learning Space Generator failed: {stderr_output}")
         
-        task.message = "Čuvanje rezultata u bazu..."
+        task.message = "Saving results to database..."
         task.progress = 95
         db.commit()
         

@@ -88,6 +88,16 @@ class AnalysisAPI {
     });
     return response.data;
   }
+
+  async getAllTasks(): Promise<{ tasks: any[]; total_count: number }> {
+    const response = await this.api.get('/tasks');
+    return response.data;
+  }
+
+  async deleteTask(taskId: number): Promise<{ success: boolean; message: string }> {
+    const response = await this.api.delete(`/${taskId}`);
+    return response.data;
+  }
 }
 
 export default new AnalysisAPI();

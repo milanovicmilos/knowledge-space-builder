@@ -1,16 +1,30 @@
 import React, { useState } from 'react';
 import './UploadForm.css';
+import {
+  Box,
+  Button,
+  Typography,
+  Paper,
+  IconButton,
+} from '@mui/material';
+import {
+  Assessment as AssessmentIcon,
+  Description as DescriptionIcon,
+  ArrowBack as ArrowBackIcon,
+  CloudUpload as CloudUploadIcon,
+} from '@mui/icons-material';
 import analysisAPI from '../api/analysis';
-import { Assessment as AssessmentIcon, Description as DescriptionIcon } from '@mui/icons-material';
 
 interface UploadFormProps {
   onUploadStart: (taskId: string) => void;
+  onBack: () => void;
 }
 
-export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart }) => {
+export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart, onBack }) => {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -44,49 +58,83 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart }) => {
     }
   };
 
-  return (
-    <div className="upload-form-container">
-      <div className="upload-form">
-        <h2>
-          <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          Knowledge Space Generator
-        </h2>
-        <p>Upload your CSV file to generate a knowledge space</p>
+  const handleLabelClick = () => {
+    fileInputRef.current?.click();
+  };
 
-        <form onSubmit={handleSubmit}>
-          <div className="file-input-wrapper">
-            <label htmlFor="file-input" className="file-input-label">
+  return (
+    <Box className="upload-container">
+      <Paper className="upload-content" elevation={2}>
+        <Box className="upload-header">
+          <Box className="upload-title">
+            <IconButton onClick={onBack} size="small" sx={{ mr: 1 }}>
+              <ArrowBackIcon />
+            </IconButton>
+            <AssessmentIcon sx={{ color: 'primary.main' }} />
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              New Analysis
+            </Typography>
+          </Box>
+        </Box>
+
+        <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
+          Upload your CSV file to generate a knowledge space
+        </Typography>
+
+        <form onSubmit={handleSubmit} className="upload-form">
+          <Box className="file-input-wrapper">
+            <label
+              htmlFor="file-input"
+              className="file-input-label"
+              onClick={handleLabelClick}
+            >
+              <CloudUploadIcon
+                sx={{
+                  fontSize: 40,
+                  display: 'block',
+                  mb: 1,
+                  color: 'primary.main',
+                }}
+              />
               {file ? file.name : 'Choose CSV file...'}
             </label>
             <input
+              ref={fileInputRef}
               id="file-input"
               type="file"
               accept=".csv"
               onChange={handleFileChange}
               disabled={loading}
+              className="file-input"
             />
-          </div>
+          </Box>
 
-          {error && <div className="error-message">{error}</div>}
+          {error && <Box className="error-message">{error}</Box>}
 
-          <button type="submit" disabled={!file || loading} className="submit-btn">
+          <Button
+            type="submit"
+            disabled={!file || loading}
+            variant="contained"
+            fullWidth
+            sx={{ mt: 2 }}
+          >
             {loading ? 'Uploading...' : 'Start Analysis'}
-          </button>
+          </Button>
         </form>
 
-        <div className="info-box">
-          <h3>
-            <DescriptionIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1.2rem' }} />
+        <Box className="info-box">
+          <Typography component="div" className="info-box h3">
+            <DescriptionIcon sx={{ fontSize: 20 }} />
             Expected CSV Format
-          </h3>
-          <ul>
-            <li>First row: Column headers (student ID, item IDs)</li>
-            <li>Rows: Student responses (0 = incorrect, 1 = correct)</li>
-            <li>Columns: Student ID + Item responses</li>
-            <li>Example: student_id,s1m11a091,s1m11a101,s1m12a191...</li>
-          </ul>
-        </div>
-      </div>
-    </div>
+          </Typography>
+          <Typography component="ul" sx={{ m: 0, pl: 2 }}>
+            <Typography component="li">First row: Column headers (student ID, item IDs)</Typography>
+            <Typography component="li">Rows: Student responses (0 = incorrect, 1 = correct)</Typography>
+            <Typography component="li">Columns: Student ID + Item responses</Typography>
+            <Typography component="li">Example: student_id,s1m11a091,s1m11a101,s1m12a191...</Typography>
+          </Typography>
+        </Box>
+      </Paper>
+    </Box>
   );
 };

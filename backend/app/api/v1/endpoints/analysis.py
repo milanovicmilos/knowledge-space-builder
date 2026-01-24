@@ -6,11 +6,12 @@ Backend čuva sve u PostgreSQL i komunicira sa LSG preko Celery tasks-a.
 
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
 from app.config import settings
 from app.database import get_db
@@ -80,7 +81,7 @@ async def run_analysis(file: UploadFile = File(...), db: Session = Depends(get_d
             upload_id=upload.id,
             status="pending",
             progress=0,
-            message="Inicijalizujem analizu...",
+            message="Initializing analysis...",
             parameters={}
         )
         db.add(task)
@@ -398,3 +399,110 @@ async def get_knowledge_space(task_id: int, db: Session = Depends(get_db)):
         status_code=404,
         detail="Knowledge space data not found"
     )
+
+
+@router.get("/tasks")
+async def get_all_tasks(db: Session = Depends(get_db)):
+    """
+    Get list of all tasks with their statistics
+    """
+    
+    tasks = db.query(Task).order_by(desc(Task.created_at)).all()
+    
+    result_list = []
+    for task in tasks:
+        # Get result statistics if available
+        result = db.query(Result).filter(Result.task_id == task.id).first()
+        
+        # Get upload info
+        upload = db.query(Upload).filter(Upload.id == task.upload_id).first()
+        
+        task_data = {
+            "task_id": task.id,
+            "status": task.status,
+            "progress": task.progress,
+            "message": task.message,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "started_at": task.started_at.isoformat() if task.started_at else None,
+            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+            "error_message": task.error_message,
+            "upload_filename": upload.original_filename if upload else None,
+        }
+        
+        # Add result statistics if completed
+        if result:
+            task_data.update({
+                "total_items": result.total_items,
+                "total_concepts": result.total_concepts,
+                "total_students": result.total_students,
+                "knowledge_space_states": result.knowledge_space_states,
+                "prerequisites_found": result.prerequisites_found,
+                "semantic_clusters": result.semantic_clusters,
+                "root_concepts": result.root_concepts,
+            })
+        
+        result_list.append(task_data)
+    
+    return {
+        "tasks": result_list,
+        "total_count": len(result_list)
+    }
+
+
+@router.delete("/{task_id}")
+async def delete_task(task_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a task and all associated data (results, uploads, files)
+    """
+    
+    task = db.query(Task).filter(Task.id == task_id).first()
+    
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found"
+        )
+    
+    try:
+        # Delete associated files from disk
+        result = db.query(Result).filter(Result.task_id == task_id).first()
+        if result and result.result_files:
+            for filepath in result.result_files.values():
+                try:
+                    file_path = Path(filepath)
+                    if file_path.exists():
+                        file_path.unlink()
+                except Exception as e:
+                    print(f"Warning: Could not delete file {filepath}: {e}")
+        
+        # Delete result from database
+        if result:
+            db.delete(result)
+        
+        # Delete uploaded CSV file
+        upload = db.query(Upload).filter(Upload.id == task.upload_id).first()
+        if upload:
+            try:
+                upload_path = Path(settings.UPLOAD_PATH) / upload.storage_key
+                if upload_path.exists():
+                    upload_path.unlink()
+            except Exception as e:
+                print(f"Warning: Could not delete upload file: {e}")
+            
+            db.delete(upload)
+        
+        # Delete task
+        db.delete(task)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Task {task_id} and all associated data deleted successfully"
+        }
+    
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete task: {str(e)}"
+        )
