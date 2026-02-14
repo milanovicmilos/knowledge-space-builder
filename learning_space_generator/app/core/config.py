@@ -17,6 +17,7 @@ class Settings:
     _uploaded = DATA_DIR / "uploaded_data.csv"
     INPUT_FILE: Path = _uploaded if _uploaded.exists() else DATA_DIR / "matheGesamt.csv"
     PDF_FILE: Path = DATA_DIR / "COINS-alle-Cluster-CH.pdf"
+    COINS_TEXT_FILE: Path = DATA_DIR / "COINS-alle-Cluster-CH.txt"
     
     CLEANED_DATA_FILE: Path = OUTPUT_DIR / "cleaned_responses.csv"
     IMPLICATIONS_FILE: Path = OUTPUT_DIR / "implications.json"

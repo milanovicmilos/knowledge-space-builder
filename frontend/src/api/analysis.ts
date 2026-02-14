@@ -29,6 +29,41 @@ interface AnalysisStatistics {
   root_concepts: number;
 }
 
+interface LearningGoal {
+  id: string;
+  uri: string;
+  label: string;
+  item_count: number;
+}
+
+interface GoalPathItem {
+  id: string;
+  label: string;
+  description: string | null;
+  full_text?: string | null;
+  difficulty?: number;
+}
+
+interface GoalPathStep {
+  id: string;
+  uri: string;
+  label: string;
+  item_count: number;
+  items: GoalPathItem[];
+  recommended_items?: GoalPathItem[];
+  depth?: number;
+  avg_difficulty?: number | null;
+  prerequisites?: Array<{ id: string; label: string }>;
+  prerequisite_evidence?: Array<{ id: string; weight: number }>;
+}
+
+interface GoalPathResponse {
+  goal: { id: string; uri: string; label: string; is_known: boolean };
+  known: string[];
+  steps: GoalPathStep[];
+  total_steps: number;
+}
+
 class AnalysisAPI {
   private api: AxiosInstance;
 
@@ -79,6 +114,20 @@ class AnalysisAPI {
 
   async getKnowledgeSpace(taskId: string): Promise<{ knowledge_space: Record<string, string[]> }> {
     const response = await this.api.get(`/${taskId}/knowledge-space`);
+    return response.data;
+  }
+
+  async getGoals(taskId: string): Promise<{ goals: LearningGoal[]; total_count: number }> {
+    const response = await this.api.get(`/${taskId}/goals`);
+    return response.data;
+  }
+
+  async getGoalPath(taskId: string, goalId: string, known?: string[]): Promise<GoalPathResponse> {
+    const params: Record<string, string> = { goal_id: goalId };
+    if (known && known.length > 0) {
+      params.known = known.join(',');
+    }
+    const response = await this.api.get(`/${taskId}/goal-path`, { params });
     return response.data;
   }
 

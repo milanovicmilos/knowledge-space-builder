@@ -11,6 +11,12 @@ import {
   Button,
   CircularProgress,
   Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Stack,
+  Chip,
   Table,
   TableBody,
   TableCell,
@@ -19,6 +25,10 @@ import {
   TableRow,
   IconButton,
   Tooltip,
+  Divider,
+  List,
+  ListItemButton,
+  ListItemText,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -58,6 +68,41 @@ interface ResultFile {
   path: string;
 }
 
+interface LearningGoal {
+  id: string;
+  uri: string;
+  label: string;
+  item_count: number;
+}
+
+interface GoalPathItem {
+  id: string;
+  label: string;
+  description: string | null;
+  full_text?: string | null;
+  difficulty?: number;
+}
+
+interface GoalPathStep {
+  id: string;
+  uri: string;
+  label: string;
+  item_count: number;
+  items: GoalPathItem[];
+  recommended_items?: GoalPathItem[];
+  depth?: number;
+  avg_difficulty?: number | null;
+  prerequisites?: Array<{ id: string; label: string }>;
+  prerequisite_evidence?: Array<{ id: string; weight: number }>;
+}
+
+interface GoalPathResponse {
+  goal: { id: string; uri: string; label: string; is_known: boolean };
+  known: string[];
+  steps: GoalPathStep[];
+  total_steps: number;
+}
+
 interface TabPanelProps {
   children?: React.ReactNode;
   index: number;
@@ -74,6 +119,13 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
+const truncateText = (value: string, maxLength: number) => {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength).trim()}...`;
+};
+
 export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onBack, onViewHistory }) => {
   const [statistics, setStatistics] = useState<Statistics | null>(null);
   const [knowledgeSpace, setKnowledgeSpace] = useState<Record<string, string[]> | null>(null);
@@ -82,6 +134,14 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onBa
   const [error, setError] = useState<string | null>(null);
   const [tabValue, setTabValue] = useState(0);
   const [graphModalOpen, setGraphModalOpen] = useState(false);
+  const [goals, setGoals] = useState<LearningGoal[]>([]);
+  const [goalsLoading, setGoalsLoading] = useState(false);
+  const [goalsError, setGoalsError] = useState<string | null>(null);
+  const [selectedGoalId, setSelectedGoalId] = useState<string>('');
+  const [goalPath, setGoalPath] = useState<GoalPathResponse | null>(null);
+  const [goalPathLoading, setGoalPathLoading] = useState(false);
+  const [goalPathError, setGoalPathError] = useState<string | null>(null);
+  const [selectedStepId, setSelectedStepId] = useState<string>('');
 
   useEffect(() => {
     const loadResults = async () => {
@@ -123,6 +183,65 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onBa
 
     loadResults();
   }, [taskId]);
+
+  useEffect(() => {
+    const loadGoals = async () => {
+      setGoalsLoading(true);
+      setGoalsError(null);
+
+      try {
+        const goalData = await analysisAPI.getGoals(taskId);
+        setGoals(goalData.goals);
+      } catch (err) {
+        setGoalsError(err instanceof Error ? err.message : 'Failed to load goals');
+      } finally {
+        setGoalsLoading(false);
+      }
+    };
+
+    loadGoals();
+  }, [taskId]);
+
+  useEffect(() => {
+    const loadGoalPath = async () => {
+      if (!selectedGoalId) {
+        setGoalPath(null);
+        return;
+      }
+
+      setGoalPathLoading(true);
+      setGoalPathError(null);
+
+      try {
+        const pathData = await analysisAPI.getGoalPath(taskId, selectedGoalId);
+        setGoalPath(pathData);
+      } catch (err) {
+        setGoalPathError(err instanceof Error ? err.message : 'Failed to load learning path');
+      } finally {
+        setGoalPathLoading(false);
+      }
+    };
+
+    loadGoalPath();
+  }, [taskId, selectedGoalId]);
+
+  useEffect(() => {
+    if (goalPath && goalPath.steps.length > 0) {
+      setSelectedStepId(goalPath.steps[0].id);
+    } else {
+      setSelectedStepId('');
+    }
+  }, [goalPath]);
+
+  const selectedStep = goalPath?.steps.find((step) => step.id === selectedStepId) || null;
+  const totalPathItems = goalPath?.steps.reduce((sum, step) => sum + step.item_count, 0) || 0;
+  const difficultyValues = goalPath?.steps
+    .map((step) => step.avg_difficulty)
+    .filter((value): value is number => value !== null && value !== undefined) || [];
+  const avgPathDifficulty = difficultyValues.length > 0
+    ? difficultyValues.reduce((sum, value) => sum + value, 0) / difficultyValues.length
+    : null;
+  const maxDepth = goalPath?.steps.reduce((value, step) => Math.max(value, step.depth ?? 0), 0) || 0;
 
   const handleDownloadFile = async (filePath: string, fileName: string) => {
     try {
@@ -225,6 +344,7 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onBa
           >
             <Tab label="Statistics Overview" />
             <Tab label="Knowledge Space Graph" disabled={!knowledgeSpace} />
+            <Tab label="Learning Goal Path" />
             <Tab label="Download Files" />
           </Tabs>
         </Paper>
@@ -446,8 +566,227 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ taskId, onBa
         )}
       </TabPanel>
 
-      {/* Files Tab */}
+      {/* Learning Goal Path Tab */}
       <TabPanel value={tabValue} index={2}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Choose a Learning Goal
+          </Typography>
+
+          {goalsLoading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <CircularProgress size={24} />
+              <Typography>Loading goals...</Typography>
+            </Box>
+          )}
+
+          {goalsError && (
+            <Alert severity="error">{goalsError}</Alert>
+          )}
+
+          {!goalsLoading && !goalsError && (
+            <FormControl sx={{ maxWidth: 480 }} fullWidth>
+              <InputLabel id="goal-select-label">Learning Goal</InputLabel>
+              <Select
+                labelId="goal-select-label"
+                value={selectedGoalId}
+                label="Learning Goal"
+                onChange={(event) => setSelectedGoalId(event.target.value)}
+              >
+                {goals.map((goal) => (
+                  <MenuItem key={goal.id} value={goal.id}>
+                    {goal.label} ({goal.item_count})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+
+          {goalPathLoading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <CircularProgress size={24} />
+              <Typography>Building learning path...</Typography>
+            </Box>
+          )}
+
+          {goalPathError && (
+            <Alert severity="error">{goalPathError}</Alert>
+          )}
+
+          {!goalPathLoading && goalPath && (
+            <Box className="goal-path-container">
+              {goalPath.goal.is_known && (
+                <Alert severity="info">
+                  This goal is already marked as known.
+                </Alert>
+              )}
+
+              {goalPath.steps.length === 0 && !goalPath.goal.is_known && (
+                <Alert severity="warning">
+                  No prerequisite path found for this goal.
+                </Alert>
+              )}
+
+              {goalPath.steps.length > 0 && (
+                <Box className="goal-summary-grid">
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={4}>
+                      <Card elevation={2} className="goal-summary-card">
+                        <CardContent>
+                          <Typography variant="overline" color="text.secondary">
+                            Selected Goal
+                          </Typography>
+                          <Typography variant="h6" sx={{ fontWeight: 600, mt: 1 }}>
+                            {goalPath.goal.label}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            Status: {goalPath.goal.is_known ? 'Known' : 'Not mastered'}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Card elevation={2} className="goal-summary-card">
+                        <CardContent>
+                          <Typography variant="overline" color="text.secondary">
+                            Path Complexity
+                          </Typography>
+                          <Typography variant="h6" sx={{ fontWeight: 600, mt: 1 }}>
+                            {goalPath.total_steps} steps
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            Max depth: {maxDepth}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Card elevation={2} className="goal-summary-card">
+                        <CardContent>
+                          <Typography variant="overline" color="text.secondary">
+                            Learning Objects
+                          </Typography>
+                          <Typography variant="h6" sx={{ fontWeight: 600, mt: 1 }}>
+                            {totalPathItems} objects
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            Avg. difficulty: {avgPathDifficulty !== null ? avgPathDifficulty.toFixed(2) : 'N/A'}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+
+              {goalPath.steps.length > 0 && (
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={4}>
+                    <Card elevation={2} className="goal-outline-card">
+                      <CardContent>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                          Path Outline
+                        </Typography>
+                        <List dense className="goal-outline-list">
+                          {goalPath.steps.map((step, index) => (
+                            <ListItemButton
+                              key={step.id}
+                              selected={step.id === selectedStepId}
+                              onClick={() => setSelectedStepId(step.id)}
+                            >
+                              <ListItemText
+                                primary={goalPath.steps.length === 1 ? `Learning Goal: ${step.label}` : `Step ${index + 1}: ${step.label}`}
+                                secondary={`${step.item_count} objects`}
+                              />
+                            </ListItemButton>
+                          ))}
+                        </List>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} md={8}>
+                    <Card elevation={2} className="goal-detail-card">
+                      <CardContent>
+                        {selectedStep ? (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <Box>
+                              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                {selectedStep.label}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Items: {selectedStep.item_count}
+                                {selectedStep.avg_difficulty !== undefined && selectedStep.avg_difficulty !== null && (
+                                  <> · Avg. difficulty: {selectedStep.avg_difficulty.toFixed(2)}</>
+                                )}
+                              </Typography>
+                            </Box>
+
+                            {selectedStep.prerequisites && selectedStep.prerequisites.length > 0 && (
+                              <Box>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                  Prerequisites
+                                </Typography>
+                                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+                                  {selectedStep.prerequisites.map((prereq) => (
+                                    <Chip key={prereq.id} label={prereq.label} size="small" />
+                                  ))}
+                                </Stack>
+                              </Box>
+                            )}
+
+                            <Divider />
+
+                            <Box>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                Recommended learning objects
+                              </Typography>
+                              <Stack spacing={1}>
+                                {selectedStep.items.map((item) => {
+                                  const itemText = item.full_text || item.description || '';
+                                  return (
+                                    <Box key={item.id} sx={{ p: 1, borderRadius: 1, bgcolor: 'action.hover' }}>
+                                      <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+                                        <Chip
+                                          label={item.label}
+                                          size="small"
+                                          color={item.difficulty !== undefined ? 'primary' : 'default'}
+                                        />
+                                        {item.difficulty !== undefined && (
+                                          <Typography variant="caption" color="text.secondary">
+                                            diff: {item.difficulty.toFixed(2)}
+                                          </Typography>
+                                        )}
+                                      </Stack>
+                                      {itemText && (
+                                        <Tooltip title={itemText} arrow>
+                                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                            {truncateText(itemText, 160)}
+                                          </Typography>
+                                        </Tooltip>
+                                      )}
+                                    </Box>
+                                  );
+                                })}
+                              </Stack>
+                            </Box>
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            Select a step to see details.
+                          </Typography>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                </Grid>
+              )}
+            </Box>
+          )}
+        </Box>
+      </TabPanel>
+
+      {/* Files Tab */}
+      <TabPanel value={tabValue} index={3}>
         {files.length > 0 ? (
           <Card elevation={3}>
             <TableContainer>
