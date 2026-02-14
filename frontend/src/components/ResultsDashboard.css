@@ -46,6 +46,34 @@
   animation: fadeIn 0.4s ease-out;
 }
 
+/* Learning Goal Path */
+.goal-path-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.goal-summary-grid {
+  width: 100%;
+}
+
+.goal-summary-card {
+  height: 100%;
+}
+
+.goal-outline-card {
+  height: 100%;
+}
+
+.goal-outline-list {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.goal-detail-card {
+  height: 100%;
+}
+
 /* Stat Cards */
 .stat-card {
   transition: transform 0.3s ease, box-shadow 0.3s ease;

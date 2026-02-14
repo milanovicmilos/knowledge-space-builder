@@ -16,6 +16,7 @@ services:
       - UPLOAD_PATH=/app/storage/uploads
       - LSG_PATH=/app/learning_space_generator
       - LSG_OUTPUT_PATH=/app/learning_space_generator/output
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
       - CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost,http://localhost:80
     ports:
       - "8000:8000"
@@ -38,6 +39,7 @@ services:
       - STORAGE_PATH=/app/storage
       - LSG_PATH=/app/learning_space_generator
       - LSG_OUTPUT_PATH=/app/learning_space_generator/output
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     depends_on:
       - backend
       - redis

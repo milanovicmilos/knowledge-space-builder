@@ -23,54 +23,82 @@ class SemanticService:
             # Explicitly force CPU to avoid any CUDA dependencies on non-GPU machines
             self.model = SentenceTransformer(settings.SEMANTIC_MODEL_NAME, device='cpu')
             
+    def _read_text_file(self, path) -> str:
+        for encoding in ("utf-8", "latin-1"):
+            try:
+                with open(path, "r", encoding=encoding) as f:
+                    return f.read()
+            except Exception:
+                continue
+        raise ValueError(f"Unable to read text file: {path}")
+
+    def _extract_snippet(self, full_text: str, search_term: str) -> str | None:
+        idx = full_text.find(search_term)
+        if idx == -1:
+            return None
+
+        snippet = full_text[idx:idx + 1500]
+
+        # Stop at common delimiters if present after the match
+        cut_points = []
+        for marker in ("Platz für Notizen", "--- PAGE", "Aufgabe "):
+            pos = snippet.find(marker, 1)
+            if pos != -1:
+                cut_points.append(pos)
+
+        if cut_points:
+            snippet = snippet[:min(cut_points)]
+
+        # Normalize whitespace for consistent output
+        return " ".join(snippet.split()).strip()
+
     def extract_item_texts(self, items: list) -> dict:
         """
-        Extracts text definitions for items from the PDF.
+        Extracts text definitions for items from COINS TXT/PDF.
         Maps item_code -> text_snippet.
         """
-        if not settings.PDF_FILE.exists():
-            logger.error(f"PDF file not found at {settings.PDF_FILE}")
-            return {item: "Description not found" for item in items}
+        full_text = ""
 
-        logger.info("Extracting text from PDF...")
-        try:
-            reader = PdfReader(settings.PDF_FILE)
-            full_text = ""
-            for page in reader.pages:
-                text = page.extract_text()
-                if text:
-                    full_text += text + "\n"
-        except Exception as e:
-            logger.error(f"Failed to read PDF: {e}")
-            return {}
+        if settings.COINS_TEXT_FILE.exists():
+            logger.info(f"Extracting text from TXT: {settings.COINS_TEXT_FILE}")
+            try:
+                full_text = self._read_text_file(settings.COINS_TEXT_FILE)
+            except Exception as e:
+                logger.error(f"Failed to read TXT file: {e}")
+
+        if not full_text and settings.PDF_FILE.exists():
+            logger.info(f"Extracting text from PDF: {settings.PDF_FILE}")
+            try:
+                reader = PdfReader(settings.PDF_FILE)
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        full_text += text + "\n"
+            except Exception as e:
+                logger.error(f"Failed to read PDF: {e}")
+
+        if not full_text:
+            logger.error("No text source available for item descriptions.")
+            return {item: "Description not found" for item in items}
 
         descriptions = {}
         found_count = 0
-        
+
         for item in items:
             # Heuristic: Items are codes like 's1m11a091'.
-            # In PDF they appear as 'm11a091' usually.
+            # In COINS text they appear as 'm11a091'.
             if item.startswith('s1') or item.startswith('s2'):
                 search_term = item[2:]
             else:
                 search_term = item
-            
-            # Find in text
-            idx = full_text.find(search_term)
-            if idx != -1:
-                # Capture next 300 chars, assuming it's the question text
-                snippet = full_text[idx:idx+400].replace('\n', ' ')
-                
-                # Cleanup: regex or just simple string manip
-                # Maybe stop at "Platz für Notizen" or next "Aufgabe"
-                if "Platz für Notizen" in snippet:
-                    snippet = snippet.split("Platz für Notizen")[0]
-                
-                descriptions[item] = snippet.strip()
+
+            snippet = self._extract_snippet(full_text, search_term)
+            if snippet:
+                descriptions[item] = snippet
                 found_count += 1
             else:
                 descriptions[item] = f"Question {item} (Text not found)"
-        
+
         logger.info(f"Extracted descriptions for {found_count}/{len(items)} items.")
         self.item_texts = descriptions
         return descriptions
