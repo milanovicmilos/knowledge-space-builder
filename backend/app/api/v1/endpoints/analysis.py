@@ -7,7 +7,7 @@ Backend čuva sve u PostgreSQL i komunicira sa LSG preko Celery tasks-a.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, Response
@@ -113,12 +113,16 @@ def _compute_edge_weights(
 
 
 @router.post("/run")
-async def run_analysis(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def run_analysis(
+    file: UploadFile = File(...),
+    pdf_file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
+):
     """
     Pokreni novu analizu
     
     Workflow:
-    1. Sačuvaj CSV u storage/uploads/
+    1. Sačuvaj CSV (i opciono PDF) u storage/uploads/
     2. Kreiraj Upload zapis u bazi
     3. Kreiraj Task zapis u bazi
     4. Pokreni Celery task (asinhrono)
@@ -126,10 +130,16 @@ async def run_analysis(file: UploadFile = File(...), db: Session = Depends(get_d
     """
     
     # Validacija
-    if not file.filename.endswith('.csv'):
+    if not file.filename or not file.filename.lower().endswith('.csv'):
         raise HTTPException(
             status_code=400,
             detail="Only CSV files are allowed"
+        )
+
+    if pdf_file and (not pdf_file.filename or not pdf_file.filename.lower().endswith('.pdf')):
+        raise HTTPException(
+            status_code=400,
+            detail="PDF file must have .pdf extension"
         )
     
     # Sačuvaj datoteku
@@ -140,11 +150,19 @@ async def run_analysis(file: UploadFile = File(...), db: Session = Depends(get_d
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     csv_filename = f"{timestamp}_{file.filename}"
     csv_path = upload_dir / csv_filename
+    pdf_path = None
     
     try:
         content = await file.read()
         with open(csv_path, "wb") as f:
             f.write(content)
+
+        if pdf_file:
+            pdf_filename = f"{timestamp}_{pdf_file.filename}"
+            pdf_path = upload_dir / pdf_filename
+            pdf_content = await pdf_file.read()
+            with open(pdf_path, "wb") as f:
+                f.write(pdf_content)
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -171,7 +189,9 @@ async def run_analysis(file: UploadFile = File(...), db: Session = Depends(get_d
             status="pending",
             progress=0,
             message="Initializing analysis...",
-            parameters={}
+            parameters={
+                "pdf_original_filename": pdf_file.filename if pdf_file else None
+            }
         )
         db.add(task)
         db.commit()
@@ -181,7 +201,8 @@ async def run_analysis(file: UploadFile = File(...), db: Session = Depends(get_d
         celery_task = run_learning_space_generator.delay(
             task_id=task.id,
             upload_id=upload.id,
-            csv_path=str(csv_path)
+            csv_path=str(csv_path),
+            pdf_path=str(pdf_path) if pdf_path else None
         )
         
         # Sačuvaj Celery task ID

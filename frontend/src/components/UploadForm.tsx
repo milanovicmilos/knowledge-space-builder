@@ -21,28 +21,41 @@ interface UploadFormProps {
 }
 
 export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart, onBack }) => {
-  const [file, setFile] = useState<File | null>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       if (selectedFile.name.endsWith('.csv')) {
-        setFile(selectedFile);
+        setCsvFile(selectedFile);
         setError(null);
       } else {
         setError('Please select a CSV file');
-        setFile(null);
+        setCsvFile(null);
+      }
+    }
+  };
+
+  const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      if (selectedFile.name.endsWith('.pdf')) {
+        setPdfFile(selectedFile);
+        setError(null);
+      } else {
+        setError('Please select a PDF file');
+        setPdfFile(null);
       }
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) {
-      setError('Please select a file');
+    if (!csvFile || !pdfFile) {
+      setError('Please select both CSV and PDF files');
       return;
     }
 
@@ -50,7 +63,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart, onBack })
     setError(null);
 
     try {
-      const result = await analysisAPI.runAnalysis(file);
+      const result = await analysisAPI.runAnalysis(csvFile, pdfFile);
       onUploadStart(result.task_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload file');
@@ -74,13 +87,13 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart, onBack })
         </Box>
 
         <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
-          Upload your CSV file to generate a knowledge space
+          Upload your CSV and PDF files to generate a knowledge space
         </Typography>
 
         <form onSubmit={handleSubmit} className="upload-form">
           <Box className="file-input-wrapper">
             <label
-              htmlFor="file-input"
+              htmlFor="csv-file-input"
               className="file-input-label"
             >
               <CloudUploadIcon
@@ -91,14 +104,38 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart, onBack })
                   color: 'primary.main',
                 }}
               />
-              {file ? file.name : 'Choose CSV file...'}
+              {csvFile ? csvFile.name : 'Choose CSV file...'}
             </label>
             <input
-              ref={fileInputRef}
-              id="file-input"
+              id="csv-file-input"
               type="file"
               accept=".csv"
-              onChange={handleFileChange}
+              onChange={handleCsvFileChange}
+              disabled={loading}
+              className="file-input"
+            />
+          </Box>
+
+          <Box className="file-input-wrapper">
+            <label
+              htmlFor="pdf-file-input"
+              className="file-input-label"
+            >
+              <CloudUploadIcon
+                sx={{
+                  fontSize: 40,
+                  display: 'block',
+                  mb: 1,
+                  color: 'primary.main',
+                }}
+              />
+              {pdfFile ? pdfFile.name : 'Choose PDF file...'}
+            </label>
+            <input
+              id="pdf-file-input"
+              type="file"
+              accept=".pdf"
+              onChange={handlePdfFileChange}
               disabled={loading}
               className="file-input"
             />
@@ -108,7 +145,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart, onBack })
 
           <Button
             type="submit"
-            disabled={!file || loading}
+            disabled={!csvFile || !pdfFile || loading}
             variant="contained"
             fullWidth
             sx={{ mt: 2 }}
@@ -120,9 +157,12 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onUploadStart, onBack })
         <Box className="info-box">
           <Typography component="div" className="info-box h3">
             <DescriptionIcon sx={{ fontSize: 20 }} />
-            Expected CSV Format
+            Expected Input Format
           </Typography>
           <Typography component="ul" sx={{ m: 0, pl: 2 }}>
+            <Typography component="li">CSV: first row contains headers, rows contain student responses (0/1)</Typography>
+            <Typography component="li">CSV: item code columns must match item codes present in the selected PDF</Typography>
+            <Typography component="li">PDF: must contain item codes and full text of tasks</Typography>
             <Typography component="li">First row: Column headers (student ID, item IDs)</Typography>
             <Typography component="li">Rows: Student responses (0 = incorrect, 1 = correct)</Typography>
             <Typography component="li">Columns: Student ID + Item responses</Typography>

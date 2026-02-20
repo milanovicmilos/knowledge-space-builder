@@ -10,6 +10,7 @@ import json
 import shutil
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 from celery import Task
 from app.celery_app import celery_app
 from app.database import SessionLocal
@@ -35,7 +36,7 @@ class DatabaseTask(Task):
 
 
 @celery_app.task(base=DatabaseTask, bind=True)
-def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: str):
+def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: str, pdf_path: Optional[str] = None):
     """
     Pokreće learning_space_generator kao Python modul (direct import)
     
@@ -81,6 +82,12 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         csv_filename = "uploaded_data.csv"
         target_csv = lsg_data_path / csv_filename
         shutil.copy(csv_path, target_csv)
+
+        uploaded_pdf_target = lsg_data_path / "uploaded_tasks.pdf"
+        if pdf_path:
+            shutil.copy(pdf_path, uploaded_pdf_target)
+        elif uploaded_pdf_target.exists():
+            uploaded_pdf_target.unlink()
         
         task.message = "Initializing Learning Space Generator..."
         task.progress = 10

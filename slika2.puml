@@ -1,0 +1,22 @@
+@startuml
+left to right direction
+
+rectangle F1 as "Ucitavanje podataka"
+rectangle F2 as "Preprocessing"
+rectangle F3 as "Semanticka klasifikacija"
+rectangle F4 as "Agregacija koncepata"
+rectangle F5 as "Analiza tezine"
+rectangle F6 as "IITA ekstrakcija"
+rectangle F7 as "Generisanje knowledge space"
+rectangle F8 as "Vizualizacija"
+rectangle F9 as "OWL ontologija"
+
+F1 --> F2
+F2 --> F3
+F3 --> F4
+F4 --> F5
+F5 --> F6
+F6 --> F7
+F7 --> F8
+F8 --> F9
+@enduml

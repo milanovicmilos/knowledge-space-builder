@@ -16,7 +16,9 @@ class Settings:
     # INPUT_FILE: Try uploaded_data.csv first (from frontend), fallback to matheGesamt.csv (local)
     _uploaded = DATA_DIR / "uploaded_data.csv"
     INPUT_FILE: Path = _uploaded if _uploaded.exists() else DATA_DIR / "matheGesamt.csv"
-    PDF_FILE: Path = DATA_DIR / "COINS-alle-Cluster-CH.pdf"
+    # PDF_FILE: Try uploaded_tasks.pdf first (from frontend), fallback to default COINS PDF
+    _uploaded_pdf = DATA_DIR / "uploaded_tasks.pdf"
+    PDF_FILE: Path = _uploaded_pdf if _uploaded_pdf.exists() else DATA_DIR / "COINS-alle-Cluster-CH.pdf"
     COINS_TEXT_FILE: Path = DATA_DIR / "COINS-alle-Cluster-CH.txt"
     
     CLEANED_DATA_FILE: Path = OUTPUT_DIR / "cleaned_responses.csv"
@@ -104,6 +106,7 @@ class Settings:
     # GitHub Models API
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
     GITHUB_API_URL: str = "https://models.github.ai/inference"
+    OPENAI_API_URL: str = os.getenv("OPENAI_API_URL", "https://api.openai.com/v1")
     
     # Primary model (gpt-4o-mini for free tier)
     LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
@@ -122,5 +125,11 @@ class Settings:
     
     # LLM cache file name (stored in OUTPUT_DIR)
     LLM_CACHE_FILE: str = os.getenv("LLM_CACHE_FILE", "llm_cache.json")
+
+    # Controlled domain vocabulary for item/cluster labeling
+    ALLOWED_MATH_DOMAINS: str = os.getenv(
+        "ALLOWED_MATH_DOMAINS",
+        "Lineare Funktionen,Geradengleichungen und Graphen,Steigung und Parallelität,Gleichungen und Umformungen,Algebra und Terme,Geometrie,Anwendungsaufgaben,Finanzmathematik"
+    )
     
 settings = Settings()

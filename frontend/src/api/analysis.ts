@@ -74,9 +74,12 @@ class AnalysisAPI {
     });
   }
 
-  async runAnalysis(file: File): Promise<{ task_id: string }> {
+  async runAnalysis(csvFile: File, pdfFile?: File): Promise<{ task_id: string }> {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', csvFile);
+    if (pdfFile) {
+      formData.append('pdf_file', pdfFile);
+    }
 
     const response = await this.api.post('/run', formData, {
       headers: {
