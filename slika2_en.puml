@@ -1,0 +1,22 @@
+@startuml
+left to right direction
+
+rectangle F1 as "Data Ingestion"
+rectangle F2 as "Preprocessing"
+rectangle F3 as "Semantic Classification"
+rectangle F4 as "Concept Aggregation"
+rectangle F5 as "Difficulty Analysis"
+rectangle F6 as "IITA Extraction"
+rectangle F7 as "Knowledge Space Generation"
+rectangle F8 as "Visualization"
+rectangle F9 as "OWL Ontology"
+
+F1 --> F2
+F2 --> F3
+F3 --> F4
+F4 --> F5
+F5 --> F6
+F6 --> F7
+F7 --> F8
+F8 --> F9
+@enduml
