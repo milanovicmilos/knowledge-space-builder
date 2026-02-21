@@ -1,6 +1,6 @@
 /**
  * Storage Service
- * Upravljanje persistent storage-om za Knowledge Space podatke
+ * Manage persistent storage for Knowledge Space data in localStorage.
  */
 
 export interface StorageData {
@@ -19,7 +19,7 @@ const TASK_ID_KEY = `${STORAGE_PREFIX}task_id`;
 
 class StorageService {
   /**
-   * Sačuva knowledge space graf
+   * Save the knowledge space graph
    */
   saveKnowledgeSpace(data: Record<string, string[]>): void {
     try {
@@ -31,7 +31,7 @@ class StorageService {
   }
 
   /**
-   * Učitaj knowledge space graf
+   * Load the knowledge space graph
    */
   loadKnowledgeSpace(): Record<string, string[]> | null {
     try {
@@ -44,7 +44,7 @@ class StorageService {
   }
 
   /**
-   * Sačuva implikacije
+   * Save implications
    */
   saveImplications(data: Array<{ source: string; target: string }>): void {
     try {
@@ -56,7 +56,7 @@ class StorageService {
   }
 
   /**
-   * Učitaj implikacije
+   * Load implications
    */
   loadImplications(): Array<{ source: string; target: string }> | null {
     try {
@@ -69,7 +69,7 @@ class StorageService {
   }
 
   /**
-   * Sačuva statistiku
+   * Save statistics
    */
   saveStatistics(data: Record<string, unknown> | any): void {
     try {
@@ -81,7 +81,7 @@ class StorageService {
   }
 
   /**
-   * Učitaj statistiku
+   * Load statistics
    */
   loadStatistics(): Record<string, unknown> | any | null {
     try {
@@ -94,7 +94,7 @@ class StorageService {
   }
 
   /**
-   * Sačuva trenutni task ID
+   * Save current task ID
    */
   saveCurrentTaskId(taskId: string): void {
     try {
@@ -106,7 +106,7 @@ class StorageService {
   }
 
   /**
-   * Učitaj trenutni task ID
+   * Load current task ID
    */
   loadCurrentTaskId(): string | null {
     try {
@@ -118,7 +118,7 @@ class StorageService {
   }
 
   /**
-   * Obriši sve podatke
+   * Clear all stored data
    */
   clearAll(): void {
     try {
@@ -132,7 +132,7 @@ class StorageService {
   }
 
   /**
-   * Proveri da li su podaci dostupni
+   * Check if any data is available
    */
   hasData(): boolean {
     return !!(
@@ -142,7 +142,7 @@ class StorageService {
   }
 
   /**
-   * Učitaj sve dostupne podatke
+   * Load all available data
    */
   loadAll(): StorageData {
     return {
@@ -155,7 +155,7 @@ class StorageService {
   }
 
   /**
-   * Sačuva sve podatke odjednom
+   * Save multiple data entries at once
    */
   saveAll(data: Partial<StorageData>): void {
     if (data.knowledgeSpace) this.saveKnowledgeSpace(data.knowledgeSpace);
@@ -165,7 +165,7 @@ class StorageService {
   }
 
   /**
-   * Proceni veličinu data-a u localStorage (u karakterima)
+   * Estimate total size of stored data in characters
    */
   estimateSize(): number {
     let size = 0;

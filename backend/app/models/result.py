@@ -18,14 +18,14 @@ class Result(Base):
     semantic_clusters = Column(Integer)
     root_concepts = Column(Integer)
     
-    # Glavne rezultate - čuva kao JSON u bazi
-    knowledge_space = Column(JSON)  # Cijeli knowledge_space.json kao struktura
-    implications = Column(JSON)  # Prerequisite relationships
+    # Primary result payloads stored as JSON in the DB
+    knowledge_space = Column(JSON)  # Full knowledge_space.json structure
+    implications = Column(JSON)  # Extracted prerequisite relationships
     semantic_clusters_data = Column(JSON)  # Semantic clusters mapping
-    llm_classifications = Column(JSON)  # Item to concept mappings
-    item_difficulties = Column(JSON)  # Difficulty scores
-    
-    # Storage keys za fajlove (ako se i dalje čuvaju na disku)
+    llm_classifications = Column(JSON)  # Item -> concept mappings
+    item_difficulties = Column(JSON)  # Item difficulty scores
+
+    # Storage keys for result files (if saved on disk)
     result_files = Column(JSON)  # {filename: storage_path}
     
     # Metadata

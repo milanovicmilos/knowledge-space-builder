@@ -1,11 +1,10 @@
-"""
-Test API endpoints - Simulira sve zahteve koje frontend salje backend-u
+"""API integration tests - simulate frontend requests to the backend.
 
-Testira kompletnu workflow:
-1. Upload CSV fajla
-2. Kreiranje task-a
-3. Pracenje progresa
-4. Preuzimanje rezultata, statistike, vizualizacije, fajlova
+Tests the full workflow:
+1. Upload CSV
+2. Create task
+3. Poll progress
+4. Retrieve results, statistics, visualization, and files
 """
 
 import sys
@@ -30,7 +29,7 @@ OUTPUT_DIR = r"c:\Users\Milos\PythonProjects\knowledge-space-builder\learning_sp
 
 
 class Colors:
-    """ANSI colors za terminal output"""
+    """ANSI color codes for terminal output"""
     GREEN = '\033[92m'
     RED = '\033[91m'
     YELLOW = '\033[93m'
@@ -55,36 +54,35 @@ def print_warning(msg):
 
 
 def test_1_upload_csv():
-    """
-    Test 1: Upload CSV fajla i kreiranje task-a
-    
+    """Test 1: Upload CSV and create a task.
+
     POST /api/v1/analysis/run
-    
-    Frontend šalje:
-    - file: FormData sa CSV fajlom
-    
-    Backend vraća:
+
+    Client sends:
+    - file: FormData with CSV
+
+    Expected backend response:
     - task_id: int
     - status: str
     - progress: int
     - message: str
     """
     print("\n" + "="*60)
-    print_info("Test 1: Upload CSV i kreiranje task-a")
+    print_info("Test 1: Upload CSV and create task")
     print("="*60)
     
-    # Koristi matheGesamt.csv iz LSG data
+    # Use matheGesamt.csv from LSG data
     test_csv_path = Path(CSV_PATH)
     if not test_csv_path.exists():
-        print_error(f"CSV fajl ne postoji: {test_csv_path}")
+        print_error(f"CSV file does not exist: {test_csv_path}")
         return None
-    print_info(f"Koristim CSV: {test_csv_path}")
+    print_info(f"Using CSV: {test_csv_path}")
     
     try:
         with open(test_csv_path, 'rb') as f:
             files = {'file': ('test_data.csv', f, 'text/csv')}
             
-            print_info(f"Šaljem POST {API_BASE}/run")
+            print_info(f"Sending POST {API_BASE}/run")
             response = requests.post(
                 f"{API_BASE}/run",
                 files=files,
@@ -95,13 +93,13 @@ def test_1_upload_csv():
             
             if response.status_code == 200:
                 data = response.json()
-                print_success("CSV uspešno upload-ovan!")
+                print_success("CSV uploaded successfully!")
                 print(f"  Task ID: {data.get('task_id')}")
                 print(f"  Status: {data.get('status')}")
                 print(f"  Progress: {data.get('progress')}%")
                 print(f"  Message: {data.get('message')}")
                 
-                # Vrati task_id za sledeće testove
+                # Return task_id for subsequent tests
                 return data.get('task_id')
             else:
                 print_error(f"Upload failed: {response.status_code}")
@@ -110,10 +108,10 @@ def test_1_upload_csv():
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print_error("Timeout pri upload-u (POST /run)")
-            print_warning("Proveri logove: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print_error("Timeout during upload (POST /run)")
+            print_warning("Check logs: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
-            print_error(f"Greška: {str(e)}")
+            print_error(f"Error: {str(e)}")
         return None
     
     finally:
@@ -121,37 +119,33 @@ def test_1_upload_csv():
 
 
 def test_2_check_status(task_id):
-    """
-    Test 2: Provera statusa task-a
-    
+    """Test 2: Check task status.
+
     GET /api/v1/analysis/{task_id}/status
-    
-    Frontend poziva ovaj endpoint svake 1 sekunde dok je task aktivan
-    
-    Backend vraća:
+
+    Client polls this endpoint every second while the task is active.
+
+    Expected response fields:
     - task_id: int
     - status: str (pending, running, completed, failed)
     - progress: int (0-100)
     - message: str
-    - created_at: str
-    - started_at: str | null
-    - completed_at: str | null
-    - error_message: str | null
+    - created_at, started_at, completed_at, error_message
     """
     print("\n" + "="*60)
-    print_info("Test 2: Praćenje statusa task-a")
+    print_info("Test 2: Poll task status")
     print("="*60)
     
     if not task_id:
-        print_error("Nema task_id za testiranje!")
+        print_error("No task_id provided for testing!")
         return False
     
-    max_attempts = 60  # 60 sekundi max
+    max_attempts = 60  # 60 seconds max
     attempt = 0
     
     while attempt < max_attempts:
         try:
-            print_info(f"Pokušaj {attempt + 1}/{max_attempts} - GET {API_BASE}/{task_id}/status")
+            print_info(f"Attempt {attempt + 1}/{max_attempts} - GET {API_BASE}/{task_id}/status")
             response = requests.get(
                 f"{API_BASE}/{task_id}/status",
                 timeout=REQUEST_TIMEOUT,
@@ -166,18 +160,18 @@ def test_2_check_status(task_id):
                 print(f"  Status: {status} | Progress: {progress}% | Message: {message}")
                 
                 if status == 'completed':
-                    print_success("Task završen uspešno!")
+                    print_success("Task completed successfully!")
                     print(f"  Started at: {data.get('started_at')}")
                     print(f"  Completed at: {data.get('completed_at')}")
                     return True
                 
                 elif status == 'failed':
-                    print_error("Task neuspešan!")
+                    print_error("Task failed!")
                     print(f"  Error: {data.get('error_message')}")
                     return False
                 
                 elif status in ['pending', 'running']:
-                    print_info(f"Task još uvek radi... ({progress}%)")
+                    print_info(f"Task still running... ({progress}%)")
                     time.sleep(1)
                     attempt += 1
                     continue
@@ -189,34 +183,30 @@ def test_2_check_status(task_id):
         
         except Exception as e:
             if isinstance(e, requests.Timeout):
-                print_error("Timeout pri proveri statusa (GET /status)")
-                print_warning("Proveri logove: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+                print_error("Timeout while checking status (GET /status)")
+                print_warning("Check logs: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
             else:
-                print_error(f"Greška: {str(e)}")
+                print_error(f"Error: {str(e)}")
             return False
     
-    print_warning("Timeout - task nije završen u predviđenom vremenu")
+    print_warning("Timeout - task did not finish in allotted time")
     return False
 
 
 def test_3_get_results(task_id):
-    """
-    Test 3: Preuzimanje rezultata analize
-    
+    """Test 3: Retrieve analysis results.
+
     GET /api/v1/analysis/{task_id}/results
-    
-    Backend vraća:
-    - task_id: int
-    - status: str
-    - completed_at: str
-    - files: dict sa JSON podacima iz output fajlova
+
+    Expected response:
+    - task_id, status, completed_at, files (mapping of output JSON files)
     """
     print("\n" + "="*60)
-    print_info("Test 3: Preuzimanje rezultata")
+    print_info("Test 3: Retrieve results")
     print("="*60)
     
     if not task_id:
-        print_error("Nema task_id za testiranje!")
+        print_error("No task_id provided for testing!")
         return
     
     try:
@@ -230,43 +220,43 @@ def test_3_get_results(task_id):
         
         if response.status_code == 200:
             data = response.json()
-            print_success("Rezultati uspešno preuzeti!")
+            print_success("Results retrieved successfully!")
             print(f"  Task ID: {data.get('task_id')}")
             print(f"  Status: {data.get('status')}")
             print(f"  Completed at: {data.get('completed_at')}")
-            print(f"  Broj fajlova: {len(data.get('files', {}))}")
+            print(f"  Number of files: {len(data.get('files', {}))}")
             
-            # Prikaži dostupne fajlove
+            # Show available files
             files = data.get('files', {})
             if files:
-                print_info("Dostupni fajlovi:")
+                print_info("Available files:")
                 for filename in files.keys():
                     print(f"    - {filename}")
 
-            # Uporedi sadržaj sa lokalnim output JSON fajlovima
+            # Compare content with local output JSON files
             all_match = True
             for filename, content in files.items():
                 if filename.endswith('.json'):
                     local_path = Path(OUTPUT_DIR) / filename
                     if not local_path.exists():
-                        print_warning(f"Lokalni fajl ne postoji: {local_path}")
+                        print_warning(f"Local file does not exist: {local_path}")
                         all_match = False
                         continue
                     try:
                         with open(local_path, 'r', encoding='utf-8') as lf:
                             local_json = json.load(lf)
                         if local_json == content:
-                            print_success(f"Podudaranje: {filename}")
+                            print_success(f"Match: {filename}")
                         else:
-                            print_error(f"NE PODUDARA se: {filename}")
+                            print_error(f"MISMATCH: {filename}")
                             all_match = False
                     except Exception as e:
-                        print_error(f"Greška pri poređenju {filename}: {e}")
+                        print_error(f"Error comparing {filename}: {e}")
                         all_match = False
             if all_match:
-                print_success("Svi JSON fajlovi u bazi identični su lokalnim output fajlovima!")
+                print_success("All JSON files in the DB match local output files!")
             else:
-                print_warning("Postoje razlike između baze i lokalnih output fajlova.")
+                print_warning("Differences found between DB and local output files.")
         
         else:
             print_error(f"Get results failed: {response.status_code}")
@@ -274,19 +264,19 @@ def test_3_get_results(task_id):
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print_error("Timeout pri preuzimanju rezultata (GET /results)")
-            print_warning("Proveri logove: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print_error("Timeout while retrieving results (GET /results)")
+            print_warning("Check logs: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
-            print_error(f"Greška: {str(e)}")
+            print_error(f"Error: {str(e)}")
 
 
 def test_4_get_statistics(task_id):
     """
-    Test 4: Preuzimanje statistike
-    
+    Test 4: Retrieve statistics
+
     GET /api/v1/analysis/{task_id}/statistics
-    
-    Backend vraća:
+
+    Backend returns:
     - task_id: int
     - status: str
     - statistics:
@@ -299,11 +289,11 @@ def test_4_get_statistics(task_id):
         - root_concepts: int
     """
     print("\n" + "="*60)
-    print_info("Test 4: Preuzimanje statistike")
+    print_info("Test 4: Retrieve statistics")
     print("="*60)
     
     if not task_id:
-        print_error("Nema task_id za testiranje!")
+        print_error("No task_id provided for testing!")
         return
     
     try:
@@ -317,11 +307,11 @@ def test_4_get_statistics(task_id):
         
         if response.status_code == 200:
             data = response.json()
-            print_success("Statistika uspešno preuzeta!")
+            print_success("Statistics retrieved successfully!")
             print(f"  Task ID: {data.get('task_id')}")
             
             stats = data.get('statistics', {})
-            print_info("Statistika:")
+            print_info("Statistics:")
             print(f"    Total Items: {stats.get('total_items')}")
             print(f"    Total Concepts: {stats.get('total_concepts')}")
             print(f"    Total Students: {stats.get('total_students')}")
@@ -336,29 +326,29 @@ def test_4_get_statistics(task_id):
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print_error("Timeout pri preuzimanju statistike (GET /statistics)")
-            print_warning("Proveri logove: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print_error("Timeout while retrieving statistics (GET /statistics)")
+            print_warning("Check logs: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
-            print_error(f"Greška: {str(e)}")
+            print_error(f"Error: {str(e)}")
 
 
 def test_5_get_visualization(task_id):
     """
-    Test 5: Preuzimanje vizualizacije (graph PNG)
-    
+    Test 5: Retrieve visualization (graph PNG)
+
     GET /api/v1/analysis/{task_id}/visualization
-    
-    Backend vraća:
+
+    Backend returns:
     - task_id: int
     - graph_file: str (path to PNG)
     - graph_exists: bool
     """
     print("\n" + "="*60)
-    print_info("Test 5: Preuzimanje vizualizacije")
+    print_info("Test 5: Retrieve visualization")
     print("="*60)
     
     if not task_id:
-        print_error("Nema task_id za testiranje!")
+        print_error("No task_id provided for testing!")
         return
     
     try:
@@ -372,7 +362,7 @@ def test_5_get_visualization(task_id):
         
         if response.status_code == 200:
             data = response.json()
-            print_success("Vizualizacija info uspešno preuzet!")
+            print_success("Visualization info retrieved successfully!")
             print(f"  Task ID: {data.get('task_id')}")
             print(f"  Graph file: {data.get('graph_file')}")
             print(f"  Graph exists: {data.get('graph_exists')}")
@@ -383,19 +373,19 @@ def test_5_get_visualization(task_id):
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print_error("Timeout pri preuzimanju vizualizacije (GET /visualization)")
-            print_warning("Proveri logove: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print_error("Timeout while retrieving visualization (GET /visualization)")
+            print_warning("Check logs: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
-            print_error(f"Greška: {str(e)}")
+            print_error(f"Error: {str(e)}")
 
 
 def test_6_list_files(task_id):
     """
-    Test 6: Lista svih dostupnih fajlova
-    
+    Test 6: List all available files
+
     GET /api/v1/analysis/{task_id}/files
-    
-    Backend vraća:
+
+    Backend returns:
     - task_id: int
     - total_files: int
     - files: list[dict]
@@ -404,11 +394,11 @@ def test_6_list_files(task_id):
         - path: str
     """
     print("\n" + "="*60)
-    print_info("Test 6: Lista svih fajlova")
+    print_info("Test 6: List all files")
     print("="*60)
     
     if not task_id:
-        print_error("Nema task_id za testiranje!")
+        print_error("No task_id provided for testing!")
         return
     
     try:
@@ -422,13 +412,13 @@ def test_6_list_files(task_id):
         
         if response.status_code == 200:
             data = response.json()
-            print_success("Lista fajlova uspešno preuzeta!")
+            print_success("File list retrieved successfully!")
             print(f"  Task ID: {data.get('task_id')}")
             print(f"  Total files: {data.get('total_files')}")
             
             files = data.get('files', [])
             if files:
-                print_info("Fajlovi:")
+                print_info("Files:")
                 for file in files:
                     size_kb = file.get('size', 0) / 1024
                     print(f"    - {file.get('name')} ({size_kb:.2f} KB)")
@@ -439,10 +429,10 @@ def test_6_list_files(task_id):
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print_error("Timeout pri listanju fajlova (GET /files)")
-            print_warning("Proveri logove: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print_error("Timeout while listing files (GET /files)")
+            print_warning("Check logs: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
-            print_error(f"Greška: {str(e)}")
+            print_error(f"Error: {str(e)}")
 
 
 def test_health():
@@ -450,7 +440,7 @@ def test_health():
     Test 0: Proveri da li je backend dostupan
     """
     print("\n" + "="*60)
-    print_info("Test 0: Health check - Da li je backend dostupan?")
+    print_info("Test 0: Health check - Is backend available?")
     print("="*60)
     
     try:
@@ -461,48 +451,48 @@ def test_health():
         )
         
         if response.status_code == 200:
-            print_success("Backend je dostupan!")
+            print_success("Backend is available!")
             return True
         else:
-            print_error(f"Backend nije dostupan! Status: {response.status_code}")
+            print_error(f"Backend not available! Status: {response.status_code}")
             return False
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print_error("Timeout pri health check-u (/docs)")
-            print_warning("Proveri logove: docker compose logs backend --tail=100")
+            print_error("Timeout during health check (/docs)")
+            print_warning("Check logs: docker compose logs backend --tail=100")
         else:
-            print_error(f"Backend nije dostupan! Greška: {str(e)}")
-        print_warning("Da li je Docker pokrenut? Komanda: docker compose up -d")
+            print_error(f"Backend not available! Error: {str(e)}")
+        print_warning("Is Docker running? Command: docker compose up -d")
         return False
 
 
 def run_all_tests():
     """
-    Pokreni sve testove redom
+    Run all tests in sequence
     """
     print("\n")
     print("="*60)
-    print(f"{Colors.BLUE}{'TESTIRANJE SVIH API ZAHTEVA SA FRONT-A':^60}{Colors.END}")
+    print(f"{Colors.BLUE}{'RUNNING ALL FRONTEND API TESTS':^60}{Colors.END}")
     print("="*60)
     
     # Test 0: Health check
     if not test_health():
-        print_error("\nBackend nije dostupan! Prekidam testiranje.")
+        print_error("\nBackend not available! Aborting tests.")
         return
     
     # Test 1: Upload CSV
     task_id = test_1_upload_csv()
     
     if not task_id:
-        print_error("\nUpload neuspešan! Prekidam testiranje.")
+        print_error("\nUpload failed! Aborting tests.")
         return
     
-    # Test 2: Prati status dok se ne završi
+    # Test 2: Poll status until completion
     completed = test_2_check_status(task_id)
     
     if not completed:
-        print_warning("\nTask nije završen, ali nastavljam sa testovima...")
+        print_warning("\nTask did not complete, continuing with remaining tests...")
     
     # Test 3-6: Preuzmi rezultate
     test_3_get_results(task_id)
@@ -510,12 +500,12 @@ def run_all_tests():
     test_5_get_visualization(task_id)
     test_6_list_files(task_id)
     
-    # Završni izvještaj
+    # Final report
     print("\n" + "="*60)
-    print(f"{Colors.GREEN}{'TESTIRANJE ZAVRŠENO':^60}{Colors.END}")
+    print(f"{Colors.GREEN}{'TESTING COMPLETE':^60}{Colors.END}")
     print("="*60)
     print_info(f"Task ID: {task_id}")
-    print_info("Svi endpointi su testirani!")
+    print_info("All endpoints have been tested!")
 
 
 if __name__ == "__main__":

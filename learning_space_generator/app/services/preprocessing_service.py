@@ -35,12 +35,8 @@ class PreprocessingService:
             logger.error(f"Error loading CSV: {e}")
             raise e
 
-        # Identify item columns (start with 's', heuristic from original script)
-        # Note: Original script logic was: [col for col in df.columns if col.startswith('s')]
-        # But 'standort' starts with 's'. The original script might have filtered it later or relied on len > ?
-        # In 01_data_preprocessing.py, it just did `col.startswith('s')`.
-        # However, checking the output from previous turns, 'standort' was present in the cleaned data.
-        # It's safer to exclude 'standort' explicitly if it exists.
+        # Identify item columns (heuristic: columns starting with 's').
+        # Exclude 'standort' explicitly if present to avoid false positives.
         
         item_cols = [col for col in df.columns if col.startswith('s') and col.lower() != 'standort']
         logger.info(f"Found {len(item_cols)} items.")
@@ -123,7 +119,7 @@ class PreprocessingService:
         data_filled = data.fillna(0)
         original_mask = data.notna()
         
-        # Koristi threshold iz settings ako nije prosleđen
+        # Use threshold from settings if not provided
         if threshold is None:
             threshold = settings.DAE_DENOISE_THRESHOLD
         
@@ -139,7 +135,7 @@ class PreprocessingService:
         return cleaned_df
 
     def run_preprocessing(self):
-        # High level orchestration
+        # High-level orchestration
         data, cols = self.load_data(settings.INPUT_FILE)
         model = self.train_dae(data)
         cleaned_data = self.denoise_data(model, data)
@@ -153,8 +149,7 @@ class PreprocessingService:
         
         # Validation stats
         total_elements = data.size
-        # Since logic was data.map, types are consistent. 
-        # But data might have been float in torch steps? No, pandas int -> float tensor -> numpy int.
+        # Data types are handled consistently through map and tensor conversions.
         
         diff = (data != cleaned_data).sum().sum()
         logger.info(f"Changed {diff} entries out of {total_elements} ({diff/total_elements:.2%})")

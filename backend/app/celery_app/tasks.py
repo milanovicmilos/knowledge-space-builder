@@ -1,8 +1,8 @@
-"""
-Celery Tasks - Pokreće Learning Space Generator
+"""Celery tasks that run the Learning Space Generator (LSG).
 
-Ovaj task je **most** između backend-a i learning_space_generator-a.
-Refaktorisano da koristi direct import umesto subprocess za bolju kontrolu i performance.
+This module acts as the bridge between the backend and the LSG. It uses
+direct Python imports of LSG services instead of subprocess execution to
+improve performance and error handling.
 """
 
 import sys
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseTask(Task):
-    """Custom Celery task sa database session"""
+    """Custom Celery Task that provides a DB session."""
     _db = None
 
     @property
@@ -37,48 +37,41 @@ class DatabaseTask(Task):
 
 @celery_app.task(base=DatabaseTask, bind=True)
 def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: str, pdf_path: Optional[str] = None):
-    """
-    Pokreće learning_space_generator kao Python modul (direct import)
-    
-    Workflow:
-    1. Kopiraj CSV u learning_space_generator/data/
-    2. Import LSG servisa direktno (umesto subprocess)
-    3. Izvršavaj pipeline korake sa progress tracking
-    4. Učitaj rezultate iz learning_space_generator/output/
-    5. Sačuvaj rezultate u PostgreSQL
-    
-    Prednosti direct import pristupa:
-    - Brže izvršavanje (nema subprocess overhead)
-    - Bolja kontrola grešaka
-    - Direktan pristup return values
-    - Lakše testiranje
+    """Run the Learning Space Generator pipeline via direct imports.
+
+    Steps:
+    1. Copy CSV (and optional PDF) into LSG `data/` directory
+    2. Import LSG services directly
+    3. Execute pipeline steps and track progress
+    4. Load generated outputs from LSG `output/`
+    5. Persist results into PostgreSQL
     """
     
     db = self.db
     
     try:
-        # Pronađi task u bazi
+        # Find task in DB
         task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
         if not task:
             raise ValueError(f"Task {task_id} not found")
         
-        # Update task status
+        # Mark task as running
         task.status = "running"
         task.started_at = datetime.now()
         task.message = "Preparing data..."
         task.progress = 5
         db.commit()
         
-        # Pripremi putanje
+        # Prepare LSG paths
         lsg_path = Path(settings.LSG_PATH)
         lsg_data_path = lsg_path / "data"
         lsg_output_path = lsg_path / "output"
         
-        # Kreiraj direktorijume ako ne postoje
+        # Create directories if missing
         lsg_data_path.mkdir(parents=True, exist_ok=True)
         lsg_output_path.mkdir(parents=True, exist_ok=True)
         
-        # Kopiraj CSV u LSG data folder
+        # Copy CSV into LSG data folder
         csv_filename = "uploaded_data.csv"
         target_csv = lsg_data_path / csv_filename
         shutil.copy(csv_path, target_csv)
@@ -93,11 +86,11 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         task.progress = 10
         db.commit()
         
-        # Dodaj LSG path u sys.path za import
+        # Ensure LSG path is on sys.path for direct imports
         if str(lsg_path) not in sys.path:
             sys.path.insert(0, str(lsg_path))
         
-        # Import LSG servisa (direct import umesto subprocess)
+        # Import LSG services via direct import
         try:
             from learning_space_generator.app.services.preprocessing_service import preprocessing_service
             from learning_space_generator.app.services.semantic_service import semantic_service
@@ -114,7 +107,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         
         # === STEP 1: Preprocessing ===
         logger.info("STEP 1: Preprocessing")
-        task.message = "DAE preprocessing..."
+        task.message = "Preprocessing data..."
         task.progress = 15
         db.commit()
         
@@ -223,7 +216,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         task.progress = 95
         db.commit()
         
-        # Učitaj rezultate iz output foldera
+        # Load results from output folder
         statistics = {}
         result_files = {}
         knowledge_space_data = None
@@ -232,7 +225,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         llm_classifications_data = None
         item_difficulties_data = None
         
-        # Load statistics from JSON files
+        # Load statistics from generated JSON files
         if (lsg_output_path / "llm_item_classifications.json").exists():
             with open(lsg_output_path / "llm_item_classifications.json", 'r') as f:
                 llm_classifications_data = json.load(f)
@@ -264,20 +257,20 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
                 if len(lines) > 1:
                     statistics["total_students"] = len(lines) - 1
         
-        # Pronađi root concepts (bez prerequisites)
+        # Find root concepts (states with no prerequisites)
         root_count = 0
         if knowledge_space_data and implications_data:
             for state in knowledge_space_data.keys():
-                if state == "{}":  # Empty set je root
+            if state == "{}":  # Empty set is a root
                     root_count += 1
             statistics["root_concepts"] = max(1, root_count)  # Minimum 1
         
-        # Index all result files
+        # Index all result files in output folder
         for file_path in lsg_output_path.glob("*"):
             if file_path.is_file():
                 result_files[file_path.name] = str(file_path)
         
-        # Sačuvaj rezultate u bazu
+        # Persist results to DB
         result = Result(
             task_id=task_id,
             total_items=statistics.get("total_items", 0),
@@ -287,7 +280,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
             prerequisites_found=statistics.get("prerequisites_found", 0),
             semantic_clusters=statistics.get("semantic_clusters", 0),
             root_concepts=statistics.get("root_concepts", 0),
-            # Sačuvaj JSON podatke u bazu
+            # Store JSON data in DB
             knowledge_space=knowledge_space_data,
             implications=implications_data,
             semantic_clusters_data=semantic_clusters_data,
@@ -301,7 +294,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         )
         db.add(result)
         
-        # Označi task kao completed
+        # Mark task as completed
         task.status = "completed"
         task.completed_at = datetime.now()
         task.progress = 100
@@ -315,7 +308,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         }
     
     except Exception as e:
-        # Označi task kao failed
+        # Mark task as failed
         task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
         if task:
             task.status = "failed"

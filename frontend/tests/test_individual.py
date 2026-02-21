@@ -1,8 +1,7 @@
-"""
-Pojedinačni testovi za svaki endpoint
+"""Individual endpoint tests.
 
-Koristi se kada želiš da testiraš samo jedan endpoint
-bez izvršavanja kompletnog workflow-a
+Use these helpers when you want to test a single endpoint without running
+the entire workflow.
 """
 
 import requests
@@ -18,14 +17,13 @@ API_BASE = f"{BASE_URL}/v1/analysis"
 
 
 def upload_csv(csv_path):
-    """
-    Uploaduj CSV fajl i kreiraj task
-    
+    """Upload a CSV file and create a task.
+
     Args:
-        csv_path: putanja do CSV fajla
-    
+        csv_path: Path to the CSV file
+
     Returns:
-        task_id ili None
+        task_id or None
     """
     print(f"Uploading {csv_path}...")
     
@@ -56,19 +54,18 @@ def upload_csv(csv_path):
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print("ERROR: Timeout pri upload-u (POST /run)")
-            print("Savet: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print("ERROR: Timeout during upload (POST /run)")
+            print("Tip: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
             print(f"ERROR: {str(e)}")
         return None
 
 
 def check_status(task_id):
-    """
-    Proveri status task-a
-    
+    """Check the status of a task.
+
     Args:
-        task_id: ID task-a
+        task_id: Task ID
     """
     print(f"Checking status for task {task_id}...")
     
@@ -96,18 +93,17 @@ def check_status(task_id):
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print("ERROR: Timeout pri proveri statusa (GET /status)")
-            print("Savet: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print("ERROR: Timeout while checking status (GET /status)")
+            print("Tip: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
             print(f"ERROR: {str(e)}")
 
 
 def get_results(task_id):
-    """
-    Preuzmi rezultate analize
-    
+    """Retrieve analysis results for a task.
+
     Args:
-        task_id: ID task-a
+        task_id: Task ID
     """
     print(f"Getting results for task {task_id}...")
     
@@ -133,18 +129,17 @@ def get_results(task_id):
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print("ERROR: Timeout pri preuzimanju rezultata (GET /results)")
-            print("Savet: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print("ERROR: Timeout while retrieving results (GET /results)")
+            print("Tip: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
             print(f"ERROR: {str(e)}")
 
 
 def get_statistics(task_id):
-    """
-    Preuzmi statistiku
-    
+    """Retrieve statistics for a task.
+
     Args:
-        task_id: ID task-a
+        task_id: Task ID
     """
     print(f"Getting statistics for task {task_id}...")
     
@@ -174,18 +169,17 @@ def get_statistics(task_id):
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print("ERROR: Timeout pri preuzimanju statistike (GET /statistics)")
-            print("Savet: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print("ERROR: Timeout while retrieving statistics (GET /statistics)")
+            print("Tip: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
             print(f"ERROR: {str(e)}")
 
 
 def get_visualization(task_id):
-    """
-    Preuzmi info o vizualizaciji
-    
+    """Get visualization info for a task.
+
     Args:
-        task_id: ID task-a
+        task_id: Task ID
     """
     print(f"Getting visualization for task {task_id}...")
     
@@ -206,18 +200,17 @@ def get_visualization(task_id):
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print("ERROR: Timeout pri preuzimanju vizualizacije (GET /visualization)")
-            print("Savet: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print("ERROR: Timeout while retrieving visualization (GET /visualization)")
+            print("Tip: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
             print(f"ERROR: {str(e)}")
 
 
 def list_files(task_id):
-    """
-    Lista svih dostupnih fajlova
-    
+    """List all available result files for a task.
+
     Args:
-        task_id: ID task-a
+        task_id: Task ID
     """
     print(f"Listing files for task {task_id}...")
     
@@ -245,25 +238,25 @@ def list_files(task_id):
     
     except Exception as e:
         if isinstance(e, requests.Timeout):
-            print("ERROR: Timeout pri listanju fajlova (GET /files)")
-            print("Savet: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
+            print("ERROR: Timeout while listing files (GET /files)")
+            print("Tip: docker compose logs backend --tail=100 && docker compose logs celery_worker --tail=100")
         else:
             print(f"ERROR: {str(e)}")
 
 
 def print_usage():
-    """Prikaži kako se koristi skripta"""
+    """Show script usage"""
     print("""
 USAGE:
     python test_individual.py <command> [args]
 
 COMMANDS:
-    upload <csv_path>       - Upload CSV fajl i kreiraj task
-    status <task_id>        - Proveri status task-a
-    results <task_id>       - Preuzmi rezultate
-    statistics <task_id>    - Preuzmi statistiku
-    visualization <task_id> - Preuzmi info o vizualizaciji
-    files <task_id>         - Lista svih fajlova
+    upload <csv_path>       - Upload CSV file and create a task
+    status <task_id>        - Check task status
+    results <task_id>       - Retrieve results
+    statistics <task_id>    - Retrieve statistics
+    visualization <task_id> - Retrieve visualization info
+    files <task_id>         - List all files
 
 EXAMPLES:
     python test_individual.py upload test_data.csv

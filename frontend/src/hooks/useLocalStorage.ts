@@ -1,8 +1,8 @@
 import { useState } from 'react';
 
 /**
- * Custom hook za persistent state sa localStorage
- * Automatski čuva i restorira state nakon reload-a
+ * Custom hook for persistent state using localStorage.
+ * Automatically saves and restores state across page reloads.
  */
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T) => void] {
   // State to store the value
