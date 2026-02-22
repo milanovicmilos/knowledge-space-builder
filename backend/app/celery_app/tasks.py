@@ -261,7 +261,7 @@ def run_learning_space_generator(self, task_id: int, upload_id: int, csv_path: s
         root_count = 0
         if knowledge_space_data and implications_data:
             for state in knowledge_space_data.keys():
-            if state == "{}":  # Empty set is a root
+                if state == "{}":  # Empty set is a root
                     root_count += 1
             statistics["root_concepts"] = max(1, root_count)  # Minimum 1
         
