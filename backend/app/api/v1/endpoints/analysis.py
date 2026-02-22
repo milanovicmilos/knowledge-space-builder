@@ -1,13 +1,12 @@
-"""
-Analysis Endpoints - Most između Frontend-a i Learning Space Generator-a
+"""Analysis endpoints - bridge between frontend and the Learning Space Generator.
 
-Backend čuva sve u PostgreSQL i komunicira sa LSG preko Celery tasks-a.
+Stores task metadata in PostgreSQL and triggers the LSG pipeline via Celery.
 """
 
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, Response
@@ -113,26 +112,35 @@ def _compute_edge_weights(
 
 
 @router.post("/run")
-async def run_analysis(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """
-    Pokreni novu analizu
-    
+async def run_analysis(
+    file: UploadFile = File(...),
+    pdf_file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
+):
+    """Start a new analysis.
+
     Workflow:
-    1. Sačuvaj CSV u storage/uploads/
-    2. Kreiraj Upload zapis u bazi
-    3. Kreiraj Task zapis u bazi
-    4. Pokreni Celery task (asinhrono)
-    5. Vrati task_id klijentu
+    1. Save CSV (and optional PDF) to storage/uploads/
+    2. Create an Upload record in the DB
+    3. Create a Task record in the DB
+    4. Trigger a Celery task (async)
+    5. Return the task_id to the client
     """
     
-    # Validacija
-    if not file.filename.endswith('.csv'):
+    # Validation
+    if not file.filename or not file.filename.lower().endswith('.csv'):
         raise HTTPException(
             status_code=400,
             detail="Only CSV files are allowed"
         )
+
+    if pdf_file and (not pdf_file.filename or not pdf_file.filename.lower().endswith('.pdf')):
+        raise HTTPException(
+            status_code=400,
+            detail="PDF file must have .pdf extension"
+        )
     
-    # Sačuvaj datoteku
+    # Save uploaded files
     upload_dir = Path(settings.UPLOAD_PATH)
     upload_dir.mkdir(parents=True, exist_ok=True)
     
@@ -140,11 +148,19 @@ async def run_analysis(file: UploadFile = File(...), db: Session = Depends(get_d
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     csv_filename = f"{timestamp}_{file.filename}"
     csv_path = upload_dir / csv_filename
+    pdf_path = None
     
     try:
         content = await file.read()
         with open(csv_path, "wb") as f:
             f.write(content)
+
+        if pdf_file:
+            pdf_filename = f"{timestamp}_{pdf_file.filename}"
+            pdf_path = upload_dir / pdf_filename
+            pdf_content = await pdf_file.read()
+            with open(pdf_path, "wb") as f:
+                f.write(pdf_content)
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -152,39 +168,42 @@ async def run_analysis(file: UploadFile = File(...), db: Session = Depends(get_d
         )
     
     try:
-        # Kreiraj Upload zapis u bazi
+        # Create Upload record in DB
         upload = Upload(
             filename=csv_filename,
             original_filename=file.filename,
             storage_key=csv_filename,
             file_size_bytes=len(content),
-            num_rows=0,  # TODO: parse CSV
+            num_rows=0,
             num_columns=0,
         )
         db.add(upload)
         db.commit()
         db.refresh(upload)
         
-        # Kreiraj Task zapis u bazi
+        # Create Task record in DB
         task = Task(
             upload_id=upload.id,
             status="pending",
             progress=0,
             message="Initializing analysis...",
-            parameters={}
+            parameters={
+                "pdf_original_filename": pdf_file.filename if pdf_file else None
+            }
         )
         db.add(task)
         db.commit()
         db.refresh(task)
         
-        # Pokreni Celery task (asinhrono)
+        # Trigger Celery task (async)
         celery_task = run_learning_space_generator.delay(
             task_id=task.id,
             upload_id=upload.id,
-            csv_path=str(csv_path)
+            csv_path=str(csv_path),
+            pdf_path=str(pdf_path) if pdf_path else None
         )
         
-        # Sačuvaj Celery task ID
+        # Save Celery task ID
         task.celery_task_id = celery_task.id
         db.commit()
         
@@ -205,9 +224,7 @@ async def run_analysis(file: UploadFile = File(...), db: Session = Depends(get_d
 
 @router.get("/{task_id}/status")
 async def get_task_status(task_id: int, db: Session = Depends(get_db)):
-    """
-    Prati status zadatka
-    """
+    """Return task status."""
     
     task = db.query(Task).filter(Task.id == task_id).first()
     
@@ -231,9 +248,7 @@ async def get_task_status(task_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{task_id}/statistics")
 async def get_analysis_statistics(task_id: int, db: Session = Depends(get_db)):
-    """
-    Preuzmi statističke brojeve iz baze
-    """
+    """Retrieve analysis statistics from the database."""
     
     task = db.query(Task).filter(Task.id == task_id).first()
     
@@ -249,7 +264,7 @@ async def get_analysis_statistics(task_id: int, db: Session = Depends(get_db)):
             detail="Task not completed yet"
         )
     
-    # Pronađi rezultate
+    # Find results
     result = db.query(Result).filter(Result.task_id == task_id).first()
     
     if not result:
@@ -273,9 +288,7 @@ async def get_analysis_statistics(task_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{task_id}/visualization")
 async def get_analysis_visualization(task_id: int, db: Session = Depends(get_db)):
-    """
-    Preuzmi putanju do PNG vizuelizacije
-    """
+    """Return path to PNG visualization."""
     
     task = db.query(Task).filter(Task.id == task_id).first()
     
@@ -299,7 +312,7 @@ async def get_analysis_visualization(task_id: int, db: Session = Depends(get_db)
             detail="Results not found"
         )
     
-    # Pronađi PNG fajl
+    # Locate PNG file
     if not result.result_files or "knowledge_structure_graph.png" not in result.result_files:
         raise HTTPException(
             status_code=404,
@@ -317,9 +330,7 @@ async def get_analysis_visualization(task_id: int, db: Session = Depends(get_db)
 
 @router.get("/{task_id}/files")
 async def list_result_files(task_id: int, db: Session = Depends(get_db)):
-    """
-    Lista svi dostupni fajlovi
-    """
+    """List all available result files."""
     
     task = db.query(Task).filter(Task.id == task_id).first()
     
@@ -349,7 +360,7 @@ async def list_result_files(task_id: int, db: Session = Depends(get_db)):
             "files": []
         }
     
-    # Konvertuj file dictionary u list
+    # Convert files dict to list
     files = []
     for filename, filepath in result.result_files.items():
         file_path = Path(filepath)
@@ -375,9 +386,7 @@ async def list_result_files(task_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{task_id}/download/{filename}")
 async def download_result_file(task_id: int, filename: str, db: Session = Depends(get_db)):
-    """
-    Preuzmi specifičan fajl iz rezultata
-    """
+    """Download a specific result file."""
     
     task = db.query(Task).filter(Task.id == task_id).first()
     
@@ -401,7 +410,7 @@ async def download_result_file(task_id: int, filename: str, db: Session = Depend
             detail="Results not found"
         )
     
-    # Pronađi fajl
+    # Find file
     if not result.result_files or filename not in result.result_files:
         raise HTTPException(
             status_code=404,
@@ -416,7 +425,7 @@ async def download_result_file(task_id: int, filename: str, db: Session = Depend
             detail=f"File not found on disk: {filepath}"
         )
     
-    # Odredi media type
+    # Determine media type
     if filename.endswith('.json'):
         media_type = "application/json"
     elif filename.endswith('.csv'):
@@ -428,7 +437,7 @@ async def download_result_file(task_id: int, filename: str, db: Session = Depend
     else:
         media_type = "application/octet-stream"
     
-    # Vrati fajl
+    # Return file
     return FileResponse(
         path=str(filepath),
         media_type=media_type,
@@ -438,10 +447,7 @@ async def download_result_file(task_id: int, filename: str, db: Session = Depend
 
 @router.get("/{task_id}/knowledge-space", response_model=dict)
 async def get_knowledge_space(task_id: int, db: Session = Depends(get_db)):
-    """
-    Učitaj knowledge_space.json iz baze ili fajla
-    Za frontend GraphModal
-    """
+    """Load `knowledge_space.json` from DB or disk for the frontend GraphModal."""
     
     task = db.query(Task).filter(Task.id == task_id).first()
     
@@ -457,7 +463,7 @@ async def get_knowledge_space(task_id: int, db: Session = Depends(get_db)):
             detail="Analysis not completed yet"
         )
     
-    # Pronađi rezultate
+    # Find results
     result = db.query(Result).filter(Result.task_id == task_id).first()
     
     if not result:
@@ -466,18 +472,18 @@ async def get_knowledge_space(task_id: int, db: Session = Depends(get_db)):
             detail="Results not found"
         )
     
-    # Prvo pokušaj iz baze
+    # Try DB first
     if result.knowledge_space:
         return {"knowledge_space": result.knowledge_space}
     
-    # Ako nije u bazi, pokušaj iz fajla (backward compatibility)
+    # If not in DB, try file (backward compatibility)
     if result.result_files and "knowledge_space.json" in result.result_files:
         try:
             filepath = Path(result.result_files["knowledge_space.json"])
             if filepath.exists():
                 with open(filepath, 'r', encoding='utf-8') as f:
                     knowledge_space = json.load(f)
-                    # Sačuvaj u bazu za budućnost
+                    # Save to DB for future requests
                     result.knowledge_space = knowledge_space
                     db.commit()
                     return {"knowledge_space": knowledge_space}
@@ -492,9 +498,7 @@ async def get_knowledge_space(task_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{task_id}/goals")
 async def get_semantic_goals(task_id: int, db: Session = Depends(get_db)):
-    """
-    List all learning goals with labels and item counts.
-    """
+    """List learning goals with labels and item counts."""
 
     graph, _ = _load_sotis_graph(task_id, db)
 
@@ -630,7 +634,7 @@ async def get_goal_path(
         if node in depth_cache:
             return depth_cache[node]
         
-        # Safeguard: prevent infinite recursion
+        # Prevent infinite recursion
         if current_depth > MAX_DEPTH:
             logger.warning(f"Max depth reached for node {node}, stopping recursion")
             depth_cache[node] = MAX_DEPTH
@@ -639,7 +643,7 @@ async def get_goal_path(
         if visited is None:
             visited = set()
         
-        # Detect cycles: if node already in current path, stop
+        # Detect cycles: stop and return current depth
         if node in visited:
             logger.warning(f"Cycle detected at node {node}, stopping recursion")
             depth_cache[node] = current_depth
@@ -657,38 +661,38 @@ async def get_goal_path(
         depth_cache[node] = 1 + max_parent_depth
         return depth_cache[node]
 
-    # FIXME: Ispravljen redosled - direktno sortiranje po depth
-    # Problem: Originalni Kahn sa dinamičkim sortiranjem ne respektuje depth redosled
+    # Note: ordering adjusted to sort directly by depth because
+    # the original Kahn algorithm with dynamic sorting did not respect depth ordering.
     
     def concept_sort_key(node: URIRef) -> tuple[int, float, str]:
-        """Sortira po: (1) depth, (2) avg_difficulty, (3) label"""
+        """Sort by (1) depth, (2) average difficulty, (3) label."""
         concept_id = _concept_id_from_uri(node)
         depth = node_depth(node)
         avg_diff = concept_difficulty.get(concept_id, 0.5)
         label = concept_labels.get(node, concept_id)
-        # depth: od manjeg ka većem (0, 1, 2, ...)
-        # avg_diff: od manjeg ka većem (lakše ka težem)
-        # label: abecedno
+        # depth: ascending (0, 1, 2, ...)
+        # avg_diff: ascending (easier to harder)
+        # label: alphabetical
         return (depth, avg_diff, label.lower())
 
-    # Prvo izračunaj depth za sve čvorove
+    # Compute depth for all nodes first (cache results)
     for node in path_nodes:
         _ = node_depth(node)  # Cache-uj sve depth vrednosti
     
-    # Sortiraj sve čvorove direktno
+    # Sort nodes directly
     ordered = sorted(path_nodes, key=concept_sort_key)
     
-    # Validacija: proveri da prerequisiti dolaze PRE svoje consequence
+    # Validation: ensure prerequisites come BEFORE their consequences
     satisfied = set()
     for node in ordered:
         for prereq in reverse.get(node, set()):
             if prereq in path_nodes:
                 if prereq not in satisfied:
-                    # 🔴 Prerequisit dolazi POSLE - logika je pogrešna!
-                    logger.error(f"Prerequisit {prereq} dolazi POSLE {node}!")
+                    # Prerequisite appears after consequence — ordering issue
+                    logger.error(f"Prerequisite {prereq} appears after {node}!")
         satisfied.add(node)
     
-    # Ako ima tema sa logičkim greškama (ciklusi), primeni Kahn sa popravkom
+    # If topological inconsistencies detected (cycles), apply Kahn's algorithm as fallback
     validity_check = all(
         all(prereq in satisfied for prereq in reverse.get(node, set()) if prereq in path_nodes)
         for node in ordered
@@ -696,7 +700,7 @@ async def get_goal_path(
     
     if not validity_check:
         logger.warning("Detected topological inconsistency, applying Kahn algorithm with fixed ordering")
-        # Fallback: Kahn sa bolje kontrolom redosleda
+        # Fallback: Kahn with stricter ordering control
         indegree_kahn: dict[URIRef, int] = {node: 0 for node in path_nodes}
         adjacency_kahn: dict[URIRef, set[URIRef]] = {node: set() for node in path_nodes}
         for src, dst in edges:
@@ -704,17 +708,17 @@ async def get_goal_path(
                 adjacency_kahn[src].add(dst)
                 indegree_kahn[dst] += 1
         
-        # Početni queue - sortiraj odmah
+        # Initial queue - sort immediately
         queue = sorted([node for node, degree in indegree_kahn.items() if degree == 0], 
                        key=concept_sort_key)
         ordered = []
         while queue:
-            # Sortiraj queue PRE nego što uzimaš element
+            # Sort queue before popping element
             queue.sort(key=concept_sort_key)
             node = queue.pop(0)
             ordered.append(node)
             
-            # Dodaj sve čvorove čiji prerequisiti su sada zadovoljeni
+            # Add nodes whose prerequisites are now satisfied
             new_nodes = []
             for nxt in adjacency_kahn.get(node, set()):
                 indegree_kahn[nxt] -= 1
@@ -766,7 +770,7 @@ async def get_goal_path(
         concept_id = _concept_id_from_uri(concept_uri)
         avg_diff = concept_difficulty.get(concept_id)
         
-        # Kreiraj prerequisite objekte sa ID i labelom
+        # Create prerequisite objects with id and label
         prereq_uris = [p for p in reverse.get(concept_uri, set()) if p in path_nodes]
         prerequisites = [
             {

@@ -1,15 +1,14 @@
-"""
-Concept Aggregation Service
-============================
-Agregira studentske odgovore sa nivoa pojedinačnih pitanja na nivo mastery po konceptu.
+"""Concept Aggregation Service
+=============================
+Aggregates student responses from item-level to concept-level mastery scores.
 
 Pipeline:
-1. Load LLM item classifications (pitanje → koncept)
-2. Load student responses (students × items)
-3. Agregacija: Za svakog studenta i koncept → mastery score
-4. Output: Agregirana matrica (students × concepts)
+1. Load LLM item classifications (item -> concept)
+2. Load student responses (students x items)
+3. Aggregate: for each student and concept -> mastery score
+4. Output: aggregated matrix (students x concepts)
 
-Ovo omogućava da IITA radi na stabilnijim, semantički smislenim varijablama.
+This allows IITA to operate on more stable, semantically meaningful variables.
 """
 
 import pandas as pd
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class ConceptAggregationService:
-    """Agregira item-level responses u concept-level mastery scores"""
+    """Aggregate item-level responses into concept-level mastery scores."""
     
     def __init__(self):
         self.item_to_concept: Dict[str, str] = {}
@@ -34,9 +33,8 @@ class ConceptAggregationService:
         self.unique_concepts: List[str] = []
         
     def load_item_classifications(self, classifications_file: Path) -> None:
-        """
-        Load LLM item classifications (već generisano u semantic_service)
-        
+        """Load LLM item classifications (produced by semantic_service).
+
         Args:
             classifications_file: Path to llm_item_classifications.json
         """
@@ -45,7 +43,7 @@ class ConceptAggregationService:
         with open(classifications_file, 'r', encoding='utf-8') as f:
             self.item_to_concept = json.load(f)
         
-        # Inverzno mapiranje: koncept → items
+        # Build inverse mapping: concept -> items
         for item, concept in self.item_to_concept.items():
             # Skip "Unbekannt" / "Unclassified" items
             if concept not in ["Unbekannt", "Unclassified", "Unknown"]:
@@ -61,15 +59,14 @@ class ConceptAggregationService:
         data_file: Path,
         output_file: Path
     ) -> Tuple[pd.DataFrame, Dict[str, List[str]]]:
-        """
-        Agregira student responses na concept-level mastery scores
-        
+        """Aggregate student responses to concept-level mastery scores.
+
         Args:
-            data_file: Path to cleaned CSV (students × items)
-            output_file: Path to save aggregated CSV (students × concepts)
-            
+            data_file: Path to cleaned CSV (students x items)
+            output_file: Path to save aggregated CSV (students x concepts)
+
         Returns:
-            Tuple of (aggregated_df, concept_to_items mapping)
+            (aggregated_df, concept_to_items mapping)
         """
         logger.info(f"Aggregating data from {data_file}")
         
@@ -77,7 +74,7 @@ class ConceptAggregationService:
         df = pd.read_csv(data_file)
         logger.info(f"Loaded data: {df.shape[0]} students, {df.shape[1]} columns")
         
-        # Identify item columns (exclude student_id if present)
+        # Identify item columns (exclude student identifier columns)
         item_columns = [col for col in df.columns if col in self.item_to_concept]
         logger.info(f"Found {len(item_columns)} item columns to aggregate")
         
@@ -92,12 +89,12 @@ class ConceptAggregationService:
                 concept_items = [item for item in self.concept_to_items[concept] if item in item_columns]
                 
                 if not concept_items:
-                    # No items for this concept in current data
-                    student_mastery[concept] = np.nan  # Changed: NaN instead of 0
+                    # No items for this concept in current data -> mark as NaN
+                    student_mastery[concept] = np.nan
                     continue
                 
-                # Calculate mastery: mean of OBSERVED responses only (ignore NaN)
-                # NaN means student didn't answer ANY question for this concept
+                # Calculate mastery: mean of observed responses only (ignore NaN)
+                # NaN indicates the student did not answer any question for this concept
                 responses = row[concept_items].values
                 observed_responses = responses[~pd.isna(responses)]
                 

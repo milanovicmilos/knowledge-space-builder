@@ -1,0 +1,22 @@
+@startuml
+title Slika 1. Visokorazredna arhitektura sistema
+
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+actor "Korisnik" as U
+component "Korisnički interfejs\n(Frontend)" as UI
+component "Pozadinski server\n(FastAPI)" as BE
+queue "Posrednički sloj\n(Redis/Celery)" as MQ
+component "Analitički radni proces\n(LSG pipeline)" as AW
+database "Baza podataka\n(PostgreSQL)" as DB
+
+U --> UI : Interakcija
+UI --> BE : HTTP API
+BE --> DB : Status i rezultati
+BE --> MQ : Pokretanje zadatka
+MQ --> AW : Asinhrona obrada
+AW --> DB : Upis rezultata
+BE --> UI : Status i rezultati
+@enduml

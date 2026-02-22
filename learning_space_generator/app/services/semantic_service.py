@@ -58,8 +58,20 @@ class SemanticService:
         Maps item_code -> text_snippet.
         """
         full_text = ""
+        use_uploaded_pdf = settings.PDF_FILE.exists() and settings.PDF_FILE.name == "uploaded_tasks.pdf"
 
-        if settings.COINS_TEXT_FILE.exists():
+        if use_uploaded_pdf and settings.PDF_FILE.exists():
+            logger.info(f"Extracting text from uploaded PDF: {settings.PDF_FILE}")
+            try:
+                reader = PdfReader(settings.PDF_FILE)
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        full_text += text + "\n"
+            except Exception as e:
+                logger.error(f"Failed to read uploaded PDF: {e}")
+
+        if not full_text and settings.COINS_TEXT_FILE.exists():
             logger.info(f"Extracting text from TXT: {settings.COINS_TEXT_FILE}")
             try:
                 full_text = self._read_text_file(settings.COINS_TEXT_FILE)

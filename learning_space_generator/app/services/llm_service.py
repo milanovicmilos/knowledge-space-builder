@@ -2,6 +2,7 @@ import logging
 import json
 import re
 import hashlib
+from typing import Dict
 from openai import OpenAI
 from learning_space_generator.app.core.config import settings
 from pathlib import Path
@@ -14,12 +15,15 @@ class LLMService:
     def __init__(self):
         self.api_key = settings.GITHUB_TOKEN
         self.base_url = settings.GITHUB_API_URL
+        self.openai_base_url = settings.OPENAI_API_URL
         self.client = None
+        self.openai_fallback_client = None
         self.model = settings.LLM_MODEL
         # alternatives is a comma-separated string in settings
         self.alternatives = [m.strip() for m in settings.LLM_ALTERNATIVES.split(",") if m.strip()]
         self.batch_size = settings.LLM_BATCH_SIZE
         self.batch_pause = settings.LLM_BATCH_PAUSE
+        self.allowed_domains = [d.strip() for d in settings.ALLOWED_MATH_DOMAINS.split(",") if d.strip()]
         # cache path
         self.cache_path = Path(settings.OUTPUT_DIR) / settings.LLM_CACHE_FILE
         self.cache = {}
@@ -39,8 +43,119 @@ class LLMService:
                 logger.info(f"LLM Service initialized with GitHub Models - model: {settings.LLM_MODEL}")
             except Exception as e:
                 logger.error(f"Failed to initialize OpenAI client: {e}")
+
+            try:
+                self.openai_fallback_client = OpenAI(
+                    base_url=self.openai_base_url,
+                    api_key=self.api_key,
+                )
+                logger.info("OpenAI fallback client initialized (same token).")
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenAI fallback client: {e}")
         else:
             logger.warning("GITHUB_TOKEN not found. LLM features will be disabled.")
+
+    def _is_auth_error(self, error: Exception) -> bool:
+        msg = str(error).lower()
+        return (
+            "401" in msg
+            or "403" in msg
+            or "unauthorized" in msg
+            or "not authorized" in msg
+            or "authentication" in msg
+            or "invalid api key" in msg
+        )
+
+    def _request_with_fallback(self, model: str, prompt: str, max_tokens: int):
+        last_error = None
+
+        if self.client:
+            try:
+                return self.client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                    max_tokens=max_tokens,
+                )
+            except Exception as e:
+                last_error = e
+                if self._is_auth_error(e) and self.openai_fallback_client:
+                    logger.warning("GitHub Models auth failed; trying OpenAI endpoint with same token.")
+                else:
+                    raise
+
+        if self.openai_fallback_client:
+            try:
+                return self.openai_fallback_client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                    max_tokens=max_tokens,
+                )
+            except Exception as e:
+                if last_error:
+                    logger.warning(f"OpenAI fallback failed after primary auth error: {e}")
+                raise
+
+        if last_error:
+            raise last_error
+        raise RuntimeError("No LLM client available")
+
+    def _build_items_fingerprint(self, items_dict: Dict[str, str]) -> str:
+        hasher = hashlib.sha1()
+        for item_id in sorted(items_dict.keys()):
+            snippet = (items_dict.get(item_id) or "")[:200].replace("\n", " ")
+            hasher.update(f"{item_id}|{snippet}".encode("utf-8"))
+        return hasher.hexdigest()
+
+    def _domain_list_text(self) -> str:
+        if not self.allowed_domains:
+            return ""
+        return "\n" + "\n".join([f"- {d}" for d in self.allowed_domains])
+
+    def _normalize_domain_label(self, label: str) -> str:
+        if not label:
+            return "Unclassified"
+
+        cleaned = re.sub(r"\s+", " ", label).strip()
+        if not cleaned:
+            return "Unclassified"
+
+        for domain in self.allowed_domains:
+            if cleaned.lower() == domain.lower():
+                return domain
+
+        normalized = cleaned.lower()
+        normalized = normalized.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+
+        keyword_map = [
+            (["finanz", "raten", "restbetrag", "kredit", "zins", "kostenmodell", "mietpreis"], "Finanzmathematik"),
+            (["steigung", "parallel", "steigungsdreieck"], "Steigung und Parallelität"),
+            (["geradengleich", "geraden", "koordinaten", "graph", "wertetabelle", "schnittpunkt", "achsenschnitt", "punkt auf"], "Geradengleichungen und Graphen"),
+            (["gleichung", "aequivalenz", "umform", "loesen"], "Gleichungen und Umformungen"),
+            (["algebra", "term", "ausdruck"], "Algebra und Terme"),
+            (["geometr", "dreieck", "winkel"], "Geometrie"),
+            (["anwendung", "sachaufgabe", "modell", "kontext", "textaufgabe", "wachstum", "wasserhaushalt", "hoehen"], "Anwendungsaufgaben"),
+            (["funktion", "linear"], "Lineare Funktionen"),
+        ]
+
+        for keywords, domain in keyword_map:
+            if any(k in normalized for k in keywords) and domain in self.allowed_domains:
+                return domain
+
+        label_tokens = set(re.findall(r"[a-zA-Z]+", normalized))
+        best = None
+        best_score = 0
+        for domain in self.allowed_domains:
+            domain_tokens = set(re.findall(r"[a-zA-Z]+", domain.lower()))
+            score = len(label_tokens & domain_tokens)
+            if score > best_score:
+                best_score = score
+                best = domain
+
+        if best:
+            return best
+        return self.allowed_domains[0] if self.allowed_domains else "Unclassified"
 
     def name_clusters_batch(self, clusters_data: dict[str, list[str]]) -> dict[str, str]:
         """
@@ -90,9 +205,11 @@ class LLMService:
         def build_prompt(items):
             p = (
                 "Du bist ein Mathematik-Experte. Analysiere die folgenden Gruppen von Aufgaben (Cluster) und ordne "
-                "jede Gruppe einen prägnanten Titel eines mathematischen Themengebiets zu (3-6 Worte) auf DEUTSCH.\n"
+                "jede Gruppe GENAU EINEM Themengebiet aus der vorgegebenen Liste zu.\n"
+                "Verwende AUSSCHLIESSLICH die Einträge aus der Liste, keine neuen Bezeichnungen.\n"
                 "Antworte AUSSCHLIESSLICH mit einem gültigen JSON-Objekt, wobei die Schlüssel Cluster-IDs und die Werte Themennamen sind.\n"
                 'Beispiel JSON: {"6": "Lineare Funktionen", "7": "Gleichungen lösen"}\n\n'
+                f"Erlaubte Themengebiete:{self._domain_list_text()}\n\n"
             )
             for cid, v in items.items():
                 p += f"--- Cluster ID: {cid} ---\nAufgaben: {v['snippet']}\n\n"
@@ -112,10 +229,9 @@ class LLMService:
             for model in models_to_try:
                 try:
                     logger.info(f"LLM Batch Naming for Clusters: {chunk_ids} with model {model}...")
-                    completion = self.client.chat.completions.create(
+                    completion = self._request_with_fallback(
                         model=model,
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0,
+                        prompt=prompt,
                         max_tokens=500,
                     )
                     response_text = completion.choices[0].message.content.strip()
@@ -140,6 +256,8 @@ class LLMService:
                     for cid in chunk_ids:
                         if cid not in names_map or not names_map[cid]:
                             names_map[cid] = f"Oblast_{cid}_(Missing)"
+                        else:
+                            names_map[cid] = self._normalize_domain_label(names_map[cid])
 
                     # Save into cache (by key) and result_map
                     for cid, name in names_map.items():
@@ -233,12 +351,23 @@ class LLMService:
         
         # Load existing classifications from cache file
         cache_file = settings.OUTPUT_DIR / "llm_item_classifications.json"
+        cache_meta_file = settings.OUTPUT_DIR / "llm_item_classifications.meta.json"
+        current_fingerprint = self._build_items_fingerprint(items_dict)
         cached_classifications = {}
         if use_cache and cache_file.exists():
             try:
-                with open(cache_file, 'r', encoding='utf-8') as f:
-                    cached_classifications = json.load(f)
-                logger.info(f"📂 Loaded {len(cached_classifications)} cached item classifications")
+                meta = {}
+                if cache_meta_file.exists():
+                    with open(cache_meta_file, 'r', encoding='utf-8') as f:
+                        meta = json.load(f)
+
+                cache_fingerprint = meta.get("fingerprint")
+                if cache_fingerprint and cache_fingerprint == current_fingerprint:
+                    with open(cache_file, 'r', encoding='utf-8') as f:
+                        cached_classifications = json.load(f)
+                    logger.info(f"📂 Loaded {len(cached_classifications)} cached item classifications")
+                else:
+                    logger.info("♻️ Item classification cache fingerprint mismatch (or missing metadata). Reclassifying all items.")
             except Exception as e:
                 logger.warning(f"Failed to load cached classifications: {e}")
         
@@ -260,8 +389,10 @@ class LLMService:
             # Build prompt
             prompt = (
                 "Du bist ein Mathematik-Experte. Analysiere die folgenden mathematischen Aufgaben und "
-                "ordne jede einem mathematischen Themengebiet zu.\n"
+                "ordne jede GENAU EINEM mathematischen Themengebiet aus der Liste zu.\n"
+                "Verwende AUSSCHLIESSLICH die Einträge aus der Liste, keine neuen Kategorien.\n"
                 "Antworte NUR mit gültigem JSON, keine Erklärung.\n\n"
+                f"Erlaubte Themengebiete:{self._domain_list_text()}\n\n"
             )
             
             for iid, text in batch_items.items():
@@ -276,10 +407,9 @@ class LLMService:
             for model in models_to_try:
                 try:
                     logger.info(f"Classifying batch {batch_ids[:3]}... with model {model}")
-                    completion = self.client.chat.completions.create(
+                    completion = self._request_with_fallback(
                         model=model,
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0,
+                        prompt=prompt,
                         max_tokens=2000,
                     )
                     response_text = completion.choices[0].message.content.strip()
@@ -303,7 +433,7 @@ class LLMService:
                     
                     for iid in batch_ids:
                         if iid in classifications and classifications[iid]:
-                            result[iid] = classifications[iid]
+                            result[iid] = self._normalize_domain_label(classifications[iid])
                         else:
                             result[iid] = "Unclassified"
                     
@@ -330,6 +460,12 @@ class LLMService:
             settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             with open(cache_file, 'w', encoding='utf-8') as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
+            with open(cache_meta_file, 'w', encoding='utf-8') as f:
+                json.dump({
+                    "fingerprint": current_fingerprint,
+                    "model": self.model,
+                    "updated_at": int(time.time())
+                }, f, ensure_ascii=False, indent=2)
             logger.info(f"💾 Saved {len(result)} item classifications to cache")
         except Exception as e:
             logger.warning(f"Failed to save classifications cache: {e}")
