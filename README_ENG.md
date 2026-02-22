@@ -52,15 +52,19 @@ Note: the data-flow diagram should be a separate image (add it when available).
 
 ---
 
-## LSG Pipeline (7 Steps)
+## LSG Pipeline (9 Phases)
 
-1. **Preprocessing** – DAE (Denoising Autoencoder) and response cleaning.
-2. **Semantic Clustering** – LLM classification + embeddings.
-3. **Concept Aggregation** – grouping items into concepts.
-4. **Difficulty Analysis** – estimation of item and concept difficulty.
-5. **Structure Extraction** – IITA algorithm for prerequisites.
-6. **Knowledge Space Generation** – valid knowledge state generation.
-7. **Ontology Export** – RDF/OWL export for the semantic web.
+The Learning Space Generator (LSG) runs as a sequential pipeline composed of nine phases. These phases reflect the complete analytic flow used in the accompanying seminar paper and implementation.
+
+1. **Data Preparation** – initial checks and metadata extraction.
+2. **Data Imputation & Denoising** – DAE (Denoising Autoencoder) to fill missing responses and reduce noise.
+3. **Semantic Classification** – LLM-based classification and sentence-embedding clustering to group items into concepts.
+4. **Concept Aggregation** – aggregate item-level responses to concept-level mastery matrices.
+5. **Difficulty Analysis** – estimate item and concept difficulty and order items pedagogically.
+6. **Structure Extraction** – IITA (Inductive Item Tree Analysis) for extracting prerequisite relations.
+7. **Knowledge Space Generation** – generate valid knowledge states from the prerequisite graph.
+8. **Visualization & Validation** – render graphs, run structural and pedagogical validation tests.
+9. **Ontology Export & Persistence** – serialize results to RDF/OWL (Turtle) and save artifacts.
 
 ---
 
@@ -102,6 +106,20 @@ LSG writes artifacts to `learning_space_generator/output/`:
 - `knowledge_space.json`
 - `knowledge_structure_graph.png`
 - `sotis_ontology.ttl`
+
+## Evaluation Summary
+
+Key evaluation metrics reported in the project paper and reproduced by the reference analysis:
+
+- Dataset: 692 students, 121 items
+- Semantic concepts (final model): 7
+- Generated knowledge states: 44
+- Extracted prerequisite relations: 5
+- Total valid transitions: 108
+- Data density (item-level before processing): ~41%
+- Data density after semantic aggregation (concept-level): ~83.75%
+
+These metrics and thresholds are used in the project's validation and reported results; they are reproduced in `seminarski_rad.md`.
 
 ---
 

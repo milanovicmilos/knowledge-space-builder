@@ -52,15 +52,19 @@ Napomena: dijagram toka podataka je izdvojen (ubaci posebnu sliku kada bude dost
 
 ---
 
-## LSG pipeline (7 koraka)
+## LSG pipeline (9 faza)
 
-1. **Preprocessing** – DAE (Denoising Autoencoder) i čišćenje odgovora.
-2. **Semantic Clustering** – LLM klasifikacija + embeddings.
-3. **Concept Aggregation** – grupisanje stavki u koncepte.
-4. **Difficulty Analysis** – procena težina stavki i koncepata.
-5. **Structure Extraction** – IITA algoritam za prerequisite odnose.
-6. **Knowledge Space Generation** – generisanje validnih stanja znanja.
-7. **Ontology Export** – RDF/OWL izvoz za semantički web.
+LSG pipeline izvodi se kao sekvencijalni niz od devet faza koji odgovara opisu u seminarskom radu.
+
+1. **Priprema podataka** – inicijalne provere i ekstrakcija metapodataka.
+2. **Popunjavanje i uklanjanje šuma** – DAE za popunjavanje nedostajućih odgovora i uklanjanje šuma.
+3. **Semantička klasifikacija** – LLM klasifikacija i embeddings za grupisanje stavki u koncepte.
+4. **Sažimanje na nivo koncepta** – agregacija odgovora sa stavke na koncept.
+5. **Analiza zahtevnosti** – procena težine stavki i koncepta.
+6. **Ekstrakcija strukture** – IITA za izdvajanje relacija preduslova.
+7. **Generisanje prostora znanja** – generisanje validnih stanja znanja.
+8. **Vizualizacija i validacija** – generisanje grafikona i validacija rezultata.
+9. **Generisanje ontologije i čuvanje** – serijalizacija u RDF/OWL i čuvanje artefakata.
 
 ---
 
@@ -102,6 +106,20 @@ LSG generiše artefakte u `learning_space_generator/output/`:
 - `knowledge_space.json`
 - `knowledge_structure_graph.png`
 - `sotis_ontology.ttl`
+
+## Rezime evaluacije
+
+Ključni metrički podaci iz seminarskog rada i referentne analize:
+
+- Skup podataka: 692 studenta, 121 stavka
+- Broj semantičkih koncepata (finalni model): 7
+- Generisana stanja znanja: 44
+- Ekstrahovane relacije preduslova: 5
+- Ukupno validnih tranzicija: 108
+- Gustina podataka (stavke, pre obrade): ~41%
+- Gustina podataka nakon semantičke agregacije (koncepti): ~83.75%
+
+Ovi rezultati i pragovi su dokumentovani u `seminarski_rad.md`.
 
 ---
 
